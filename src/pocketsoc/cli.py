@@ -13,6 +13,7 @@ from .alerts import calculate_risk_score
 from .api_server import serve_api
 from .api_token import rotate_api_token
 from .archive import rotate_history_archive
+from .audit_export import export_audit
 from .autofix import run_autofix_safe
 from .baseline import create_baseline, diff_baseline, load_baseline
 from .bundle import build_incident_bundle
@@ -24,16 +25,20 @@ from .doctor import run_doctor
 from .explain import explain_alert
 from .exporters import export_siem
 from .forensics import build_forensics_snapshot
+from .forensics_verify import verify_forensics_snapshot
 from .integrity_monitor import run_integrity_monitor
 from .notify import notify_if_needed
 from .output.files import export_markdown_report, export_trends_csv, load_alerts, load_last_scan, load_scan_history, prune_history, save_alerts, save_scan
 from .output.render import render_alerts, render_dashboard_summary, render_scan, render_trends
 from .policy import eval_policy, write_default_policy
+from .readonly import guard_mutation
 from .redaction import redact_scan_data
+from .report_diff import diff_scans, load_scan_file
 from .rules import write_default_rules
-from .scanner import run_scan
+from .scanner import run_scan, scan_plan
 from .scheduler import install_schedule
 from .suppress import add_suppression
+from .suppress_manage import list_suppressions, remove_suppression
 from .webui import write_web_ui
 
 app = typer.Typer(help="PocketSOC CLI")
@@ -67,8 +72,13 @@ def _exit_on_alert_threshold(payload: dict, fail_on_alert: str) -> None:
             raise typer.Exit(code=2)
 
 
+@scan_app.command("plan", help="Show which checks would run for a given profile/resource profile.")
+def scan_plan_cmd(profile: Literal["quick", "standard", "deep"] = typer.Option("standard"), resource_profile: Literal["low", "balanced", "high"] = typer.Option("balanced")) -> None:
+    console.print_json(data=scan_plan(profile, resource_profile))
+
+
 @scan_app.command("run", help="Run a defensive local scan and persist signed artifacts.")
-def scan_run(data_dir: str | None = typer.Option(None, help="Override data directory."), profile: Literal["quick", "standard", "deep"] = typer.Option("standard"), resource_profile: Literal["low", "balanced", "high"] = typer.Option("balanced"), time_profile: Literal["auto", "day", "night"] = typer.Option("auto"), since_last: bool = typer.Option(False), parallel: bool = typer.Option(False), timeout: int = typer.Option(60), quiet: bool = typer.Option(False), output: Literal["table", "json", "ndjson"] = typer.Option("table"), fail_on_alert: Literal["none", "low", "medium", "high"] = typer.Option("none"), redact: bool = typer.Option(False), notify: bool = typer.Option(True)) -> None:
+def scan_run(data_dir: str | None = typer.Option(None), profile: Literal["quick", "standard", "deep"] = typer.Option("standard"), resource_profile: Literal["low", "balanced", "high"] = typer.Option("balanced"), time_profile: Literal["auto", "day", "night"] = typer.Option("auto"), since_last: bool = typer.Option(False), parallel: bool = typer.Option(False), timeout: int = typer.Option(60), quiet: bool = typer.Option(False), output: Literal["table", "json", "ndjson"] = typer.Option("table"), fail_on_alert: Literal["none", "low", "medium", "high"] = typer.Option("none"), redact: bool = typer.Option(False), notify: bool = typer.Option(True)) -> None:
     root = _resolve_data_dir(data_dir)
     thresholds = load_threshold_config(root)
     hist = load_scan_history(root)
@@ -93,6 +103,8 @@ def scan_run(data_dir: str | None = typer.Option(None, help="Override data direc
             hydrated = ScanResult(scan_payload.get("timestamp", "n/a"), [CheckResult(**c) for c in scan_payload.get("checks", [])], [Alert(**a) for a in alerts_payload.get("alerts", [])], alerts_payload.get("risk_score", calculate_risk_score([])))
             render_scan(hydrated)
             render_alerts(hydrated)
+            if "category_scores" in scan_payload:
+                console.print_json(data={"category_scores": scan_payload["category_scores"]})
             print(f"[green]Risk score:[/green] {hydrated.risk_score}")
     _exit_on_alert_threshold(alerts_payload, fail_on_alert)
 
@@ -142,6 +154,11 @@ def report_md(data_dir: str | None = typer.Option(None), redact: bool = typer.Op
     print(f"[green]Report written:[/green] {export_markdown_report(scan_data, alerts, root, report_format=report_format, compare_baseline=baseline_diff_data)}")
 
 
+@report_app.command("diff", help="Compare two scan JSON files directly.")
+def report_diff(scan_a: str, scan_b: str) -> None:
+    console.print_json(data=diff_scans(load_scan_file(Path(scan_a)), load_scan_file(Path(scan_b))))
+
+
 @report_app.command("trends", help="Display trends and optionally export CSV.")
 def report_trends(data_dir: str | None = typer.Option(None), csv: bool = typer.Option(False, "--csv")) -> None:
     root = _resolve_data_dir(data_dir)
@@ -156,8 +173,14 @@ def report_export(data_dir: str | None = typer.Option(None), fmt: Literal["cef",
     print(f"[green]Export written:[/green] {export_siem(_resolve_data_dir(data_dir), fmt)}")
 
 
+@report_app.command("audit-export", help="Export API audit log in JSON or CSV.")
+def report_audit_export(data_dir: str | None = typer.Option(None), fmt: Literal["json", "csv"] = typer.Option("json")) -> None:
+    print(f"[green]Audit export written:[/green] {export_audit(_resolve_data_dir(data_dir), fmt=fmt)}")
+
+
 @report_app.command("bundle", help="Build incident bundle ZIP from local artifacts.")
 def report_bundle(data_dir: str | None = typer.Option(None), since: str = typer.Option("24h"), redact: bool = typer.Option(False, "--redact"), sign: bool = typer.Option(True, "--sign/--no-sign")) -> None:
+    guard_mutation()
     root = _resolve_data_dir(data_dir)
     _ = since
     out = build_incident_bundle(root, redact=redact)
@@ -177,6 +200,7 @@ def report_bundle_verify(bundle_path: str, data_dir: str | None = typer.Option(N
 
 @baseline_app.command("create", help="Create a baseline snapshot from latest scan.")
 def baseline_create_cmd(data_dir: str | None = typer.Option(None), profile: Literal["quick", "standard", "deep"] = typer.Option("standard"), device_id: str = typer.Option("local-device")) -> None:
+    guard_mutation()
     print(f"[green]Baseline saved:[/green] {create_baseline(_resolve_data_dir(data_dir), profile, device_id=device_id)}")
 
 
@@ -201,6 +225,7 @@ def api_serve(host: str = typer.Option("127.0.0.1"), port: int = typer.Option(87
 
 @api_app.command("key-rotate", help="Rotate local API read-only token file.")
 def api_key_rotate_cmd(data_dir: str | None = typer.Option(None)) -> None:
+    guard_mutation()
     print(f"[green]API token rotated:[/green] {rotate_api_token(_resolve_data_dir(data_dir))}")
 
 
@@ -230,8 +255,16 @@ def maint_verify_integrity(data_dir: str | None = typer.Option(None)) -> None:
 
 @maint_app.command("forensics-lite", help="Collect signed local forensic-lite snapshot.")
 def maint_forensics_lite(data_dir: str | None = typer.Option(None)) -> None:
+    guard_mutation()
     root = _resolve_data_dir(data_dir) or Path.home() / ".pocketsoc"
     print(f"[green]Snapshot created:[/green] {build_forensics_snapshot(root)}")
+
+
+@maint_app.command("forensics-verify", help="Verify signature of a forensics-lite snapshot file.")
+def maint_forensics_verify(snapshot_path: str, data_dir: str | None = typer.Option(None)) -> None:
+    if not verify_forensics_snapshot(Path(snapshot_path), _resolve_data_dir(data_dir)):
+        raise typer.Exit(code=2)
+    print("[green]Forensics snapshot signature valid.[/green]")
 
 
 @maint_app.command("history-prune", help="Prune scan history by age and/or max entries.")
@@ -240,6 +273,7 @@ def maint_history_prune(data_dir: str | None = typer.Option(None), days: int | N
         hist = load_scan_history(_resolve_data_dir(data_dir))
         console.print_json(data={"dry_run": True, "current_entries": len(hist), "days": days, "max_scans": max_scans})
         return
+    guard_mutation()
     print(f"[green]History pruned. Entries kept:[/green] {prune_history(_resolve_data_dir(data_dir), days=days, max_scans=max_scans)}")
 
 
@@ -248,27 +282,32 @@ def maint_archive_rotate(data_dir: str | None = typer.Option(None), dry_run: boo
     if dry_run:
         console.print_json(data={"dry_run": True, "would_archive": "scan-history.jsonl"})
         return
+    guard_mutation()
     out = rotate_history_archive(_resolve_data_dir(data_dir))
     print(f"[green]Archive created:[/green] {out}" if out else "[yellow]No history to archive.[/yellow]")
 
 
 @maint_app.command("schedule-install", help="Install local scheduled scan script and metadata.")
 def maint_schedule_install(data_dir: str | None = typer.Option(None), interval: str = typer.Option("6h")) -> None:
+    guard_mutation()
     print(f"[green]Schedule installed:[/green] {install_schedule(interval, _resolve_data_dir(data_dir))}")
 
 
 @config_app.command("init", help="Create/overwrite threshold configuration presets.")
 def config_init(data_dir: str | None = typer.Option(None), force: bool = typer.Option(False), profile: Literal["balanced", "strict", "battery-saver"] = typer.Option("balanced")) -> None:
+    guard_mutation()
     print(f"[green]Config ready:[/green] {write_default_config(_resolve_data_dir(data_dir), force=force, profile=profile)}")
 
 
 @config_app.command("rules", help="Create/overwrite custom rule definitions.")
 def config_rules(data_dir: str | None = typer.Option(None), force: bool = typer.Option(False)) -> None:
+    guard_mutation()
     print(f"[green]Rules ready:[/green] {write_default_rules(_resolve_data_dir(data_dir), force=force)}")
 
 
 @config_app.command("policy", help="Create local compliance policy template.")
 def config_policy(data_dir: str | None = typer.Option(None), force: bool = typer.Option(False)) -> None:
+    guard_mutation()
     print(f"[green]Policy ready:[/green] {write_default_policy(_resolve_data_dir(data_dir), force=force)}")
 
 
@@ -279,6 +318,7 @@ def config_backup_cmd(data_dir: str | None = typer.Option(None)) -> None:
 
 @config_app.command("restore", help="Restore config/rules/policy files.")
 def config_restore_cmd(data_dir: str | None = typer.Option(None)) -> None:
+    guard_mutation()
     console.print_json(data={"restored": restore_config(_resolve_data_dir(data_dir))})
 
 
@@ -289,8 +329,20 @@ def config_deps_verify(lockfile: str = typer.Option("requirements-lock.txt")) ->
 
 @config_app.command("suppress-add", help="Add suppression pattern with optional expiration timestamp.")
 def config_suppress_add(pattern: str, expires_at: str = typer.Option(""), data_dir: str | None = typer.Option(None)) -> None:
+    guard_mutation()
     rule = {"pattern": pattern, "expires_at": expires_at}
     print(f"[green]Suppression added:[/green] {add_suppression(rule, _resolve_data_dir(data_dir))}")
+
+
+@config_app.command("suppress-list", help="List current suppression rules.")
+def config_suppress_list(data_dir: str | None = typer.Option(None)) -> None:
+    console.print_json(data={"suppressions": list_suppressions(_resolve_data_dir(data_dir))})
+
+
+@config_app.command("suppress-remove", help="Remove suppression rule by 1-based index.")
+def config_suppress_remove(index: int, data_dir: str | None = typer.Option(None)) -> None:
+    guard_mutation()
+    console.print_json(data=remove_suppression(index, _resolve_data_dir(data_dir)))
 
 
 @config_app.command("autofix-safe", help="Apply non-destructive local bootstrap fixes.")
@@ -298,6 +350,7 @@ def config_autofix_safe(data_dir: str | None = typer.Option(None), dry_run: bool
     if dry_run:
         console.print_json(data={"dry_run": True, "would_fix": ["config.json", "rules.json"]})
         return
+    guard_mutation()
     console.print_json(data=run_autofix_safe(_resolve_data_dir(data_dir)))
 
 

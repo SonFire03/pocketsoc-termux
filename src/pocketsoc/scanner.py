@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from .alert_fatigue import suppress_repeated_alerts
@@ -27,12 +28,36 @@ from .rules import apply_custom_rules, load_rules
 from .scoring import category_scores
 
 
-def _run_checks_serial(thresholds: ThresholdConfig, profile: str) -> list:
+def scan_plan(profile: str, resource_profile: str) -> dict:
+    base = ["storage_usage", "battery_info", "network_info", "listening_ports", "running_processes", "app_inventory"]
+    if profile in ("standard", "deep"):
+        base += ["sensitive_permissions", "package_hygiene", "local_persistence"]
+    if profile == "deep":
+        base += ["outbound_connections", "binary_integrity"]
+    return {"profile": profile, "resource_profile": resource_profile, "checks": base}
+
+
+def _run_checks_serial(thresholds: ThresholdConfig, profile: str, retry_failures: bool = False) -> list:
     checks = [check_storage_usage(thresholds), check_battery_info(thresholds), check_network_info(), check_listening_ports(thresholds), check_running_processes(thresholds), check_app_inventory()]
     if profile in ("standard", "deep"):
         checks.extend([check_sensitive_permissions(), check_package_hygiene(thresholds), check_local_persistence()])
     if profile == "deep":
         checks.extend([check_outbound_connections(), check_binary_integrity()])
+
+    if retry_failures:
+        retried = []
+        for c in checks:
+            if c.name in {"network_info", "package_hygiene"} and c.status in {"warning", "info"}:
+                time.sleep(0.3)
+                if c.name == "network_info":
+                    c2 = check_network_info()
+                else:
+                    c2 = check_package_hygiene(thresholds)
+                retried.append(c2)
+            else:
+                retried.append(c)
+        checks = retried
+
     return checks
 
 
@@ -45,12 +70,13 @@ def run_scan(
     parallel: bool = False,
     timeout_seconds: int = 60,
     resource_profile: str = "balanced",
+    retry_failures: bool = True,
 ) -> ScanResult:
     _ = timeout_seconds
     if resource_profile == "low":
         parallel = False
 
-    checks = run_checks_parallel(thresholds, profile) if parallel else _run_checks_serial(thresholds, profile)
+    checks = run_checks_parallel(thresholds, profile) if parallel else _run_checks_serial(thresholds, profile, retry_failures=retry_failures)
 
     if rules_data_dir:
         checks.extend(load_plugin_checks(Path(rules_data_dir) / "checks.d"))
