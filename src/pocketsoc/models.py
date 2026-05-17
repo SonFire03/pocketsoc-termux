@@ -27,6 +27,7 @@ class ScanResult:
     timestamp: str
     checks: list[CheckResult]
     alerts: list[Alert]
+    risk_score: int = 0
 
 
 DEFAULT_DATA_DIR_NAME = ".pocketsoc"

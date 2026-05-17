@@ -19,11 +19,12 @@ def test_scan_command_runs(monkeypatch, tmp_path) -> None:
             timestamp="2026-05-17T00:00:00+00:00",
             checks=[CheckResult(name="storage_usage", status="ok", summary="fine", details={})],
             alerts=[],
+            risk_score=0,
         )
 
     monkeypatch.setattr("pocketsoc.cli.run_scan", fake_run_scan)
 
-    result = runner.invoke(app, ["scan", "--data-dir", str(tmp_path)])
+    result = runner.invoke(app, ["scan", "--data-dir", str(tmp_path), "--quiet"])
     assert result.exit_code == 0
 
 
@@ -37,3 +38,8 @@ def test_init_config_creates_file(tmp_path) -> None:
     result = runner.invoke(app, ["init-config", "--data-dir", str(tmp_path)])
     assert result.exit_code == 0
     assert (tmp_path / "config.json").exists()
+
+
+def test_trends_runs(tmp_path) -> None:
+    result = runner.invoke(app, ["trends", "--data-dir", str(tmp_path)])
+    assert result.exit_code == 0

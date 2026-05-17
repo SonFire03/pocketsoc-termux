@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .alerts import build_alerts
+from .alerts import build_alerts, calculate_risk_score
 from .checks.collectors import (
     check_battery_info,
     check_listening_ports,
@@ -21,4 +21,4 @@ def run_scan(thresholds: ThresholdConfig) -> ScanResult:
         check_running_processes(thresholds),
     ]
     alerts = build_alerts(checks, thresholds)
-    return ScanResult(timestamp=utc_now_iso(), checks=checks, alerts=alerts)
+    return ScanResult(timestamp=utc_now_iso(), checks=checks, alerts=alerts, risk_score=calculate_risk_score(alerts))

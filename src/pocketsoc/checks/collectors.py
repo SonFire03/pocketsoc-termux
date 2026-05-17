@@ -39,30 +39,15 @@ def check_storage_usage(thresholds: ThresholdConfig, path: Path | None = None) -
 
 def check_battery_info(thresholds: ThresholdConfig) -> CheckResult:
     if not command_exists("termux-battery-status"):
-        return CheckResult(
-            name="battery_info",
-            status="info",
-            summary="termux-battery-status not available",
-            details={"available": False},
-        )
+        return CheckResult("battery_info", "info", "termux-battery-status not available", {"available": False})
 
     ok, output = run_command(["termux-battery-status"])
     if not ok:
-        return CheckResult(
-            name="battery_info",
-            status="warning",
-            summary="failed to collect battery info",
-            details={"available": True, "error": output},
-        )
+        return CheckResult("battery_info", "warning", "failed to collect battery info", {"available": True, "error": output})
 
     parsed_ok, payload = parse_json(output)
     if not parsed_ok:
-        return CheckResult(
-            name="battery_info",
-            status="warning",
-            summary="invalid battery JSON payload",
-            details={"available": True, **payload},
-        )
+        return CheckResult("battery_info", "warning", "invalid battery JSON payload", {"available": True, **payload})
 
     pct = payload.get("percentage")
     status = "ok"
@@ -72,39 +57,32 @@ def check_battery_info(thresholds: ThresholdConfig) -> CheckResult:
         elif pct <= thresholds.battery_warning_pct:
             status = "warning"
 
-    return CheckResult(
-        name="battery_info",
-        status=status,
-        summary=f"battery {pct}%" if pct is not None else "battery information collected",
-        details={"available": True, **payload},
-    )
+    return CheckResult("battery_info", status, f"battery {pct}%" if pct is not None else "battery information collected", {"available": True, **payload})
 
 
 def check_network_info() -> CheckResult:
-    if not command_exists("ip"):
-        return CheckResult(
-            name="network_info",
-            status="info",
-            summary="ip command not available",
-            details={"available": False},
-        )
-
-    ok_addr, addr = run_command(["ip", "-brief", "address"])
-    ok_route, route = run_command(["ip", "route"])
+    if command_exists("ip"):
+        ok_addr, addr = run_command(["ip", "-brief", "address"])
+        ok_route, route = run_command(["ip", "route"])
+    elif command_exists("ifconfig"):
+        ok_addr, addr = run_command(["ifconfig"])
+        ok_route, route = run_command(["route", "-n"] if command_exists("route") else ["echo", ""])
+    else:
+        return CheckResult("network_info", "info", "ip/ifconfig command not available", {"available": False})
 
     if not ok_addr and not ok_route:
         return CheckResult(
-            name="network_info",
-            status="warning",
-            summary="failed to collect network info",
-            details={"available": True, "address_error": addr, "route_error": route},
+            "network_info",
+            "warning",
+            "failed to collect network info",
+            {"available": True, "address_error": addr, "route_error": route},
         )
 
     return CheckResult(
-        name="network_info",
-        status="ok",
-        summary="network interfaces and routes collected",
-        details={
+        "network_info",
+        "ok",
+        "network interfaces and routes collected",
+        {
             "available": True,
             "address": addr if ok_addr else "",
             "routes": route if ok_route else "",
@@ -126,67 +104,48 @@ def check_listening_ports(thresholds: ThresholdConfig) -> CheckResult:
         source = "netstat"
 
     if cmd is None:
-        return CheckResult(
-            name="listening_ports",
-            status="info",
-            summary="ss/netstat not available",
-            details={"available": False, "ports": []},
-        )
+        return CheckResult("listening_ports", "info", "ss/netstat not available", {"available": False, "ports": []})
 
     ok, output = run_command(cmd)
     if not ok:
         return CheckResult(
-            name="listening_ports",
-            status="warning",
-            summary="failed to collect listening ports",
-            details={"available": True, "source": source, "error": output, "ports": []},
+            "listening_ports",
+            "warning",
+            "failed to collect listening ports",
+            {"available": True, "source": source, "error": output, "ports": []},
         )
 
     lines = [line for line in output.splitlines() if line.strip()]
     if lines and ("Netid" in lines[0] or "Proto" in lines[0]):
         lines = lines[1:]
 
-    status = "ok"
-    if len(lines) > thresholds.listening_ports_warning_count:
-        status = "warning"
-
+    status = "warning" if len(lines) > thresholds.listening_ports_warning_count else "ok"
     return CheckResult(
-        name="listening_ports",
-        status=status,
-        summary=f"{len(lines)} listening entries found",
-        details={"available": True, "source": source, "ports": lines},
+        "listening_ports",
+        status,
+        f"{len(lines)} listening entries found",
+        {"available": True, "source": source, "ports": lines},
     )
 
 
 def check_running_processes(thresholds: ThresholdConfig) -> CheckResult:
     if not command_exists("ps"):
-        return CheckResult(
-            name="running_processes",
-            status="info",
-            summary="ps command not available",
-            details={"available": False, "count": 0, "processes": []},
-        )
+        return CheckResult("running_processes", "info", "ps command not available", {"available": False, "count": 0, "processes": []})
 
-    ok, output = run_command(["ps", "-A", "-o", "pid,ppid,comm"])
+    variants = [["ps", "-A", "-o", "pid,ppid,comm"], ["ps", "-ef"], ["ps"]]
+    ok = False
+    output = ""
+    for cmd in variants:
+        ok, output = run_command(cmd)
+        if ok:
+            break
+
     if not ok:
-        return CheckResult(
-            name="running_processes",
-            status="warning",
-            summary="failed to collect running processes",
-            details={"available": True, "error": output, "count": 0, "processes": []},
-        )
+        return CheckResult("running_processes", "warning", "failed to collect running processes", {"available": True, "error": output, "count": 0, "processes": []})
 
     lines = [line for line in output.splitlines() if line.strip()]
-    if lines and "PID" in lines[0]:
+    if lines and any(head in lines[0] for head in ("PID", "UID", "USER")):
         lines = lines[1:]
 
-    status = "ok"
-    if len(lines) > thresholds.process_warning_count:
-        status = "warning"
-
-    return CheckResult(
-        name="running_processes",
-        status=status,
-        summary=f"{len(lines)} processes observed",
-        details={"available": True, "count": len(lines), "processes": lines[:100]},
-    )
+    status = "warning" if len(lines) > thresholds.process_warning_count else "ok"
+    return CheckResult("running_processes", status, f"{len(lines)} processes observed", {"available": True, "count": len(lines), "processes": lines[:100]})

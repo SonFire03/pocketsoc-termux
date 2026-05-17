@@ -1,18 +1,16 @@
 # PocketSOC for Termux
 
+![CI](https://img.shields.io/badge/CI-GitHub%20Actions-blue)
+
 PocketSOC is a lightweight, defensive, local-only monitoring CLI for Android Termux.
 
 ## What It Is
 
 - A small Python CLI (Typer + Rich) for local health and security visibility.
-- A local scan runner for:
-  - storage usage
-  - battery information (via `termux-battery-status` when available)
-  - network information (via `ip`)
-  - listening ports (via `ss` or `netstat`)
-  - running processes
-- A basic alerting layer with JSON alert output.
-- A Markdown report exporter for sharing local findings.
+- Local checks for storage, battery, network, listening ports, and running processes.
+- JSON alerts with risk scoring and deduplication.
+- Scan history and trend view.
+- Markdown report export with recommended actions.
 - Configurable local thresholds (`~/.pocketsoc/config.json`).
 
 ## What It Is Not
@@ -52,10 +50,20 @@ pip install -e .[dev]
 ```bash
 pocketsoc init-config
 pocketsoc scan
+pocketsoc trends
 pocketsoc dashboard
 pocketsoc report
 pocketsoc alerts
 ```
+
+## Useful CLI Options
+
+- `pocketsoc scan --quiet`
+- `pocketsoc scan --output json`
+- `pocketsoc scan --fail-on-alert medium`
+- `pocketsoc scan --redact`
+- `pocketsoc alerts --table --redact`
+- `pocketsoc report --redact`
 
 Optional `--data-dir` is supported on all commands.
 
@@ -65,15 +73,24 @@ By default, PocketSOC stores data in `~/.pocketsoc/`:
 
 - `config.json`
 - `last_scan.json`
+- `scan-history.jsonl`
 - `alerts.json`
 - `pocketsoc-report.md`
 
 ## Development
 
-Run tests:
+Run quality checks:
 
 ```bash
+ruff check .
+mypy src
 pytest
+```
+
+Enable git hooks:
+
+```bash
+pre-commit install
 ```
 
 ## License
