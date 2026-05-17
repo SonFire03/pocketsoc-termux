@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .config import ThresholdConfig
 from .models import Alert, CheckResult
 
 
@@ -7,13 +8,13 @@ CRITICAL_PORT_KEYWORDS = (":5555", ":23", ":21")
 SUSPICIOUS_PROCESS_KEYWORDS = ("nc", "ncat", "socat")
 
 
-def build_alerts(checks: list[CheckResult]) -> list[Alert]:
+def build_alerts(checks: list[CheckResult], thresholds: ThresholdConfig) -> list[Alert]:
     alerts: list[Alert] = []
 
     for check in checks:
         if check.name == "storage_usage":
             used_pct = check.details.get("used_pct", 0)
-            if isinstance(used_pct, (int, float)) and used_pct >= 95:
+            if isinstance(used_pct, (int, float)) and used_pct >= thresholds.storage_critical_pct:
                 alerts.append(
                     Alert(
                         id="ALERT-STORAGE-CRITICAL",
@@ -26,7 +27,7 @@ def build_alerts(checks: list[CheckResult]) -> list[Alert]:
 
         if check.name == "battery_info":
             pct = check.details.get("percentage")
-            if isinstance(pct, (int, float)) and pct <= 10:
+            if isinstance(pct, (int, float)) and pct <= thresholds.battery_critical_pct:
                 alerts.append(
                     Alert(
                         id="ALERT-BATTERY-LOW",

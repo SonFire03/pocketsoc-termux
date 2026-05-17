@@ -8,16 +8,17 @@ from .checks.collectors import (
     check_running_processes,
     check_storage_usage,
 )
+from .config import ThresholdConfig
 from .models import ScanResult, utc_now_iso
 
 
-def run_scan() -> ScanResult:
+def run_scan(thresholds: ThresholdConfig) -> ScanResult:
     checks = [
-        check_storage_usage(),
-        check_battery_info(),
+        check_storage_usage(thresholds),
+        check_battery_info(thresholds),
         check_network_info(),
-        check_listening_ports(),
-        check_running_processes(),
+        check_listening_ports(thresholds),
+        check_running_processes(thresholds),
     ]
-    alerts = build_alerts(checks)
+    alerts = build_alerts(checks, thresholds)
     return ScanResult(timestamp=utc_now_iso(), checks=checks, alerts=alerts)

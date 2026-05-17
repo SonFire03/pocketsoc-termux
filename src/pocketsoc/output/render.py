@@ -27,6 +27,23 @@ def render_scan(scan: ScanResult) -> None:
     console.print(table)
 
 
+def render_dashboard_summary(scan: ScanResult) -> None:
+    total = len(scan.checks)
+    critical = sum(1 for c in scan.checks if c.status == "critical")
+    warning = sum(1 for c in scan.checks if c.status == "warning")
+    info = sum(1 for c in scan.checks if c.status == "info")
+
+    table = Table(title="PocketSOC Dashboard")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Total checks", str(total))
+    table.add_row("Critical checks", str(critical))
+    table.add_row("Warning checks", str(warning))
+    table.add_row("Info checks", str(info))
+    table.add_row("Alerts", str(len(scan.alerts)))
+    console.print(table)
+
+
 def render_alerts(scan: ScanResult) -> None:
     if not scan.alerts:
         console.print("[green]No alerts generated.[/green]")

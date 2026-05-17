@@ -3,11 +3,12 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from ..config import ThresholdConfig
 from ..models import CheckResult
 from ..system import command_exists, parse_json, run_command
 
 
-def check_storage_usage(path: Path | None = None) -> CheckResult:
+def check_storage_usage(thresholds: ThresholdConfig, path: Path | None = None) -> CheckResult:
     target = path or Path.home()
     usage = shutil.disk_usage(target)
 
@@ -17,9 +18,9 @@ def check_storage_usage(path: Path | None = None) -> CheckResult:
     used_pct = (usage.used / usage.total) * 100 if usage.total else 0
 
     status = "ok"
-    if used_pct >= 95:
+    if used_pct >= thresholds.storage_critical_pct:
         status = "critical"
-    elif used_pct >= 85:
+    elif used_pct >= thresholds.storage_warning_pct:
         status = "warning"
 
     return CheckResult(
@@ -36,7 +37,7 @@ def check_storage_usage(path: Path | None = None) -> CheckResult:
     )
 
 
-def check_battery_info() -> CheckResult:
+def check_battery_info(thresholds: ThresholdConfig) -> CheckResult:
     if not command_exists("termux-battery-status"):
         return CheckResult(
             name="battery_info",
@@ -66,9 +67,9 @@ def check_battery_info() -> CheckResult:
     pct = payload.get("percentage")
     status = "ok"
     if isinstance(pct, (int, float)):
-        if pct <= 10:
+        if pct <= thresholds.battery_critical_pct:
             status = "critical"
-        elif pct <= 20:
+        elif pct <= thresholds.battery_warning_pct:
             status = "warning"
 
     return CheckResult(
@@ -113,7 +114,7 @@ def check_network_info() -> CheckResult:
     )
 
 
-def check_listening_ports() -> CheckResult:
+def check_listening_ports(thresholds: ThresholdConfig) -> CheckResult:
     cmd: list[str] | None = None
     source = ""
 
@@ -142,12 +143,11 @@ def check_listening_ports() -> CheckResult:
         )
 
     lines = [line for line in output.splitlines() if line.strip()]
-    # Remove header when present.
     if lines and ("Netid" in lines[0] or "Proto" in lines[0]):
         lines = lines[1:]
 
     status = "ok"
-    if len(lines) > 25:
+    if len(lines) > thresholds.listening_ports_warning_count:
         status = "warning"
 
     return CheckResult(
@@ -158,7 +158,7 @@ def check_listening_ports() -> CheckResult:
     )
 
 
-def check_running_processes() -> CheckResult:
+def check_running_processes(thresholds: ThresholdConfig) -> CheckResult:
     if not command_exists("ps"):
         return CheckResult(
             name="running_processes",
@@ -181,7 +181,7 @@ def check_running_processes() -> CheckResult:
         lines = lines[1:]
 
     status = "ok"
-    if len(lines) > 250:
+    if len(lines) > thresholds.process_warning_count:
         status = "warning"
 
     return CheckResult(

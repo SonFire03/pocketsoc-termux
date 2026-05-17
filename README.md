@@ -13,6 +13,7 @@ PocketSOC is a lightweight, defensive, local-only monitoring CLI for Android Ter
   - running processes
 - A basic alerting layer with JSON alert output.
 - A Markdown report exporter for sharing local findings.
+- Configurable local thresholds (`~/.pocketsoc/config.json`).
 
 ## What It Is Not
 
@@ -49,6 +50,7 @@ pip install -e .[dev]
 ## Commands
 
 ```bash
+pocketsoc init-config
 pocketsoc scan
 pocketsoc dashboard
 pocketsoc report
@@ -61,6 +63,7 @@ Optional `--data-dir` is supported on all commands.
 
 By default, PocketSOC stores data in `~/.pocketsoc/`:
 
+- `config.json`
 - `last_scan.json`
 - `alerts.json`
 - `pocketsoc-report.md`

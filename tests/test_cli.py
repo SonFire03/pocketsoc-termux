@@ -12,7 +12,7 @@ runner = CliRunner()
 def test_scan_command_runs(monkeypatch, tmp_path) -> None:
     from pocketsoc.models import ScanResult
 
-    def fake_run_scan() -> ScanResult:
+    def fake_run_scan(_thresholds) -> ScanResult:
         from pocketsoc.models import CheckResult
 
         return ScanResult(
@@ -31,3 +31,9 @@ def test_dashboard_requires_scan(tmp_path) -> None:
     result = runner.invoke(app, ["dashboard", "--data-dir", str(tmp_path)])
     assert result.exit_code == 1
     assert "No scan found" in result.stdout
+
+
+def test_init_config_creates_file(tmp_path) -> None:
+    result = runner.invoke(app, ["init-config", "--data-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert (tmp_path / "config.json").exists()
