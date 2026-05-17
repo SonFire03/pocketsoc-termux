@@ -10,14 +10,17 @@ from rich.console import Console
 
 from .alerts import calculate_risk_score
 from .api_server import serve_api
+from .api_token import rotate_api_token
 from .archive import rotate_history_archive
 from .autofix import run_autofix_safe
 from .baseline import create_baseline, diff_baseline, load_baseline
 from .bundle import build_incident_bundle
+from .bundle_sign import sign_bundle, verify_bundle
 from .config import load_threshold_config, write_default_config
 from .configio import backup_config, restore_config
 from .deps import verify_lock
 from .doctor import run_doctor
+from .explain import explain_alert
 from .exporters import export_siem
 from .notify import notify_if_needed
 from .output.files import export_markdown_report, export_trends_csv, load_alerts, load_last_scan, load_scan_history, prune_history, save_alerts, save_scan
@@ -54,6 +57,11 @@ def doctor(fix_hints: bool = typer.Option(False, "--fix-hints", help="Include ac
 @app.command("autofix-safe", help="Apply non-destructive local fixes (config/rules/bootstrap files).")
 def autofix_safe(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
     console.print_json(data=run_autofix_safe(_resolve_data_dir(data_dir)))
+
+
+@app.command("api-key-rotate", help="Rotate local API read-only token file.")
+def api_key_rotate(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+    print(f"[green]API token rotated:[/green] {rotate_api_token(_resolve_data_dir(data_dir))}")
 
 
 @app.command("serve", help="Start local read-only API server for scans/alerts/trends.")
@@ -97,11 +105,11 @@ def init_policy(data_dir: str | None = typer.Option(None, help="Override data di
 
 
 @app.command(help="Run a defensive local scan and persist signed artifacts.")
-def scan(data_dir: str | None = typer.Option(None, help="Override data directory."), profile: Literal["quick", "standard", "deep"] = typer.Option("standard", help="Scan profile."), time_profile: Literal["auto", "day", "night"] = typer.Option("auto", help="Temporal profile for threshold tuning."), since_last: bool = typer.Option(False, help="Only keep newly emerged alerts vs previous scan."), parallel: bool = typer.Option(False, help="Run checks in parallel for faster scans."), quiet: bool = typer.Option(False, help="Minimal output mode."), output: Literal["table", "json", "ndjson"] = typer.Option("table", help="Output format."), fail_on_alert: Literal["none", "low", "medium", "high"] = typer.Option("none", help="Exit code 2 if alerts reach severity."), redact: bool = typer.Option(False, help="Redact sensitive values in output."), notify: bool = typer.Option(True, help="Send local Termux notification on critical risk.")) -> None:
+def scan(data_dir: str | None = typer.Option(None, help="Override data directory."), profile: Literal["quick", "standard", "deep"] = typer.Option("standard", help="Scan profile."), resource_profile: Literal["low", "balanced", "high"] = typer.Option("balanced", help="Resource usage profile for scan execution."), time_profile: Literal["auto", "day", "night"] = typer.Option("auto", help="Temporal profile for threshold tuning."), since_last: bool = typer.Option(False, help="Only keep newly emerged alerts vs previous scan."), parallel: bool = typer.Option(False, help="Run checks in parallel for faster scans."), timeout: int = typer.Option(60, help="Global scan timeout hint in seconds."), quiet: bool = typer.Option(False, help="Minimal output mode."), output: Literal["table", "json", "ndjson"] = typer.Option("table", help="Output format."), fail_on_alert: Literal["none", "low", "medium", "high"] = typer.Option("none", help="Exit code 2 if alerts reach severity."), redact: bool = typer.Option(False, help="Redact sensitive values in output."), notify: bool = typer.Option(True, help="Send local Termux notification on critical risk.")) -> None:
     root = _resolve_data_dir(data_dir)
     thresholds = load_threshold_config(root)
     hist = load_scan_history(root)
-    result = run_scan(thresholds, profile=profile, rules_data_dir=root, history=hist, since_last=since_last, parallel=parallel)
+    result = run_scan(thresholds, profile=profile, rules_data_dir=root, history=hist, since_last=since_last, parallel=parallel, timeout_seconds=timeout, resource_profile=resource_profile)
     if time_profile in ("auto", "night"):
         result.risk_score += 1
     save_scan(result, root)
@@ -129,6 +137,11 @@ def scan(data_dir: str | None = typer.Option(None, help="Override data directory
             print(f"[green]Risk score:[/green] {hydrated.risk_score}")
 
     _exit_on_alert_threshold(alerts_payload, fail_on_alert)
+
+
+@app.command("explain-alert", help="Explain why a specific alert ID was generated.")
+def explain_alert_cmd(alert_id: str, data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+    console.print_json(data=explain_alert(alert_id, _resolve_data_dir(data_dir)))
 
 
 @app.command(help="Show current scan status summary and per-check table.")
@@ -162,8 +175,8 @@ def baseline_diff(data_dir: str | None = typer.Option(None, help="Override data 
 
 
 @app.command("policy-eval", help="Evaluate latest scan against local compliance policy.")
-def policy_eval(data_dir: str | None = typer.Option(None, help="Override data directory."), enforce: bool = typer.Option(False, "--enforce", help="Exit non-zero if policy is not compliant.")) -> None:
-    res = eval_policy(_resolve_data_dir(data_dir))
+def policy_eval(data_dir: str | None = typer.Option(None, help="Override data directory."), enforce: bool = typer.Option(False, "--enforce", help="Exit non-zero if policy is not compliant."), baseline_aware: bool = typer.Option(False, "--baseline-aware", help="Include baseline drift in policy evaluation.")) -> None:
+    res = eval_policy(_resolve_data_dir(data_dir), baseline_aware=baseline_aware)
     console.print_json(data=res)
     if enforce and not res.get("compliant", False):
         raise typer.Exit(code=2)
@@ -181,9 +194,24 @@ def archive_rotate(data_dir: str | None = typer.Option(None, help="Override data
 
 
 @app.command("bundle", help="Build incident bundle ZIP from local artifacts.")
-def bundle(data_dir: str | None = typer.Option(None, help="Override data directory."), since: str = typer.Option("24h", help="Time hint metadata for analyst workflow."), redact: bool = typer.Option(False, "--redact", help="Produce anonymized bundle copy.")) -> None:
+def bundle(data_dir: str | None = typer.Option(None, help="Override data directory."), since: str = typer.Option("24h", help="Time hint metadata for analyst workflow."), redact: bool = typer.Option(False, "--redact", help="Produce anonymized bundle copy."), sign: bool = typer.Option(True, "--sign/--no-sign", help="Sign bundle and emit .sig file.")) -> None:
+    root = _resolve_data_dir(data_dir)
     _ = since
-    print(f"[green]Bundle created:[/green] {build_incident_bundle(_resolve_data_dir(data_dir), redact=redact)}")
+    out = build_incident_bundle(root, redact=redact)
+    if sign:
+        sig = sign_bundle(out, root)
+        print(f"[green]Bundle created:[/green] {out}\n[green]Signature:[/green] {sig}")
+    else:
+        print(f"[green]Bundle created:[/green] {out}")
+
+
+@app.command("bundle-verify", help="Verify signature of a generated incident bundle.")
+def bundle_verify(bundle_path: str, data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+    ok = verify_bundle(Path(bundle_path), _resolve_data_dir(data_dir))
+    if ok:
+        print("[green]Bundle signature valid.[/green]")
+    else:
+        raise typer.Exit(code=2)
 
 
 @app.command("schedule-install", help="Install local scheduled scan script and metadata.")
@@ -206,12 +234,13 @@ def export_cmd(data_dir: str | None = typer.Option(None, help="Override data dir
 
 
 @app.command(help="Export a Markdown report from latest signed data.")
-def report(data_dir: str | None = typer.Option(None, help="Override data directory."), redact: bool = typer.Option(False, help="Redact sensitive values in report."), report_format: Literal["full", "executive"] = typer.Option("full", "--format", help="Report style.")) -> None:
+def report(data_dir: str | None = typer.Option(None, help="Override data directory."), redact: bool = typer.Option(False, help="Redact sensitive values in report."), report_format: Literal["full", "executive"] = typer.Option("full", "--format", help="Report style."), compare_baseline: bool = typer.Option(False, "--compare-baseline", help="Append drift section against baseline.")) -> None:
     root = _resolve_data_dir(data_dir)
     scan_data, alerts = load_last_scan(root), load_alerts(root)
     if redact:
         scan_data, alerts = redact_scan_data(scan_data, alerts)
-    print(f"[green]Report written:[/green] {export_markdown_report(scan_data, alerts, root, report_format=report_format)}")
+    baseline_diff_data = diff_baseline(scan_data, load_baseline(root)) if compare_baseline else None
+    print(f"[green]Report written:[/green] {export_markdown_report(scan_data, alerts, root, report_format=report_format, compare_baseline=baseline_diff_data)}")
 
 
 @app.command(help="Display alerts as JSON or formatted table.")
@@ -228,8 +257,8 @@ def alerts(data_dir: str | None = typer.Option(None, help="Override data directo
 
 
 @app.command("release-tag", help="Print semantic version tag and release note template.")
-def release_tag(version: str = typer.Option("v0.9.0", help="Target semver tag.")) -> None:
-    typer.echo(f"Tag: {version}\\nRelease notes: parallel scan, category score, policy enforce, API filters, redacted bundles.")
+def release_tag(version: str = typer.Option("v1.0.0", help="Target semver tag.")) -> None:
+    typer.echo(f"Tag: {version}\\nRelease notes: timeout/resource profiles, bundle signatures, explain-alert, compare baseline.")
 
 
 if __name__ == "__main__":

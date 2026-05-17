@@ -10,7 +10,7 @@ from ..integrity import sign_payload, verify_payload
 from ..models import ScanResult
 from ..system import default_data_dir
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 ALERTS_FILE = "alerts.json"
 LAST_SCAN_FILE = "last_scan.json"
 HISTORY_FILE = "scan-history.jsonl"
@@ -28,6 +28,8 @@ def save_scan(scan: ScanResult, data_dir: Path | None = None) -> Path:
     root = ensure_data_dir(data_dir)
     payload = asdict(scan)
     payload["schema_version"] = SCHEMA_VERSION
+    if hasattr(scan, "category_scores"):
+        payload["category_scores"] = getattr(scan, "category_scores")
     raw = json.dumps(payload, indent=2)
     p = root / LAST_SCAN_FILE
     p.write_text(raw, encoding="utf-8")
@@ -40,6 +42,8 @@ def append_scan_history(scan: ScanResult, data_dir: Path | None = None) -> Path:
     root = ensure_data_dir(data_dir)
     row = asdict(scan)
     row["schema_version"] = SCHEMA_VERSION
+    if hasattr(scan, "category_scores"):
+        row["category_scores"] = getattr(scan, "category_scores")
     p = root / HISTORY_FILE
     with p.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(row) + "\n")
@@ -128,11 +132,15 @@ def load_alerts(data_dir: Path | None = None) -> dict:
     return d if d else {"schema_version": SCHEMA_VERSION, "alerts": [], "risk_score": 0}
 
 
-def export_markdown_report(scan: dict, alerts: dict, data_dir: Path | None = None, report_format: str = "full") -> Path:
+def export_markdown_report(scan: dict, alerts: dict, data_dir: Path | None = None, report_format: str = "full", compare_baseline: dict | None = None) -> Path:
     root = ensure_data_dir(data_dir)
     p = root / REPORT_FILE
     if report_format == "executive":
         lines = ["# PocketSOC Executive Report", f"Timestamp: {scan.get('timestamp','n/a')}", f"Risk score: {alerts.get('risk_score',0)}", f"Alerts: {len(alerts.get('alerts',[]))}", "", "Top actions:", "- Investigate high severity alerts first", "- Close unnecessary listening ports", "- Update outdated packages"]
+        if compare_baseline:
+            lines.extend(["", "Changes vs baseline:"])
+            for row in compare_baseline.get("new_checks_warning_or_critical", []):
+                lines.append(f"- {row.get('name')}: {row.get('from')} -> {row.get('to')}")
         p.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return p
 
@@ -140,5 +148,9 @@ def export_markdown_report(scan: dict, alerts: dict, data_dir: Path | None = Non
     lines = ["# PocketSOC Report", f"Schema version: {scan.get('schema_version',SCHEMA_VERSION)}", f"Generated: {ts}", f"Risk score: {alerts.get('risk_score',0)}", "", "## Checks", "| Check | Status | Summary |", "| --- | --- | --- |"]
     for c in scan.get("checks", []):
         lines.append(f"| {c.get('name')} | {c.get('status')} | {c.get('summary')} |")
+    if compare_baseline:
+        lines.extend(["", "## Changes vs Baseline"])
+        for row in compare_baseline.get("new_checks_warning_or_critical", []):
+            lines.append(f"- {row.get('name')}: {row.get('from')} -> {row.get('to')}")
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return p

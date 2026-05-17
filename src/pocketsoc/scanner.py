@@ -5,6 +5,7 @@ from pathlib import Path
 from .alert_fatigue import suppress_repeated_alerts
 from .alerts import build_alerts, calculate_risk_score
 from .alerts_burst import detect_burst
+from .anomaly import detect_stat_anomalies
 from .checks.collectors import (
     check_app_inventory,
     check_battery_info,
@@ -35,7 +36,20 @@ def _run_checks_serial(thresholds: ThresholdConfig, profile: str) -> list:
     return checks
 
 
-def run_scan(thresholds: ThresholdConfig, profile: str = "standard", rules_data_dir=None, history: list[dict] | None = None, since_last: bool = False, parallel: bool = False) -> ScanResult:
+def run_scan(
+    thresholds: ThresholdConfig,
+    profile: str = "standard",
+    rules_data_dir=None,
+    history: list[dict] | None = None,
+    since_last: bool = False,
+    parallel: bool = False,
+    timeout_seconds: int = 60,
+    resource_profile: str = "balanced",
+) -> ScanResult:
+    _ = timeout_seconds
+    if resource_profile == "low":
+        parallel = False
+
     checks = run_checks_parallel(thresholds, profile) if parallel else _run_checks_serial(thresholds, profile)
 
     if rules_data_dir:
@@ -53,6 +67,11 @@ def run_scan(thresholds: ThresholdConfig, profile: str = "standard", rules_data_
 
     if detect_burst(history or []):
         dict_alerts.append({"id": "ALERT-BURST", "severity": "high", "title": "Alert burst detected", "description": "Rapid increase of alerts in short time window", "source_check": "history"})
+
+    latest_stub = {"risk_score": 0, "alerts": dict_alerts}
+    anomalies = detect_stat_anomalies(history or [], latest_stub)
+    for idx, entry in enumerate(anomalies, start=1):
+        dict_alerts.append({"id": f"ALERT-ANOMALY-{idx}", "severity": "medium", "title": "Statistical anomaly detected", "description": entry, "source_check": "history"})
 
     final_alerts = [Alert(**a) for a in dict_alerts]
     risk = calculate_risk_score(final_alerts)

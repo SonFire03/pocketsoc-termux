@@ -1,16 +1,14 @@
 # PocketSOC for Termux
 
-PocketSOC is a defensive, local-only monitoring CLI for Android Termux.
+## v1.0.0 Highlights
 
-## New in v0.9.0
+- `scan --timeout`
+- `scan --resource-profile low|balanced|high`
+- signed incident bundles + `bundle-verify`
+- `api-key-rotate`
+- `policy-eval --baseline-aware`
+- statistical anomaly detection alerts
+- `explain-alert <id>`
+- `report --compare-baseline`
 
-- `scan --parallel`
-- category health scores
-- alert burst detection
-- `policy-eval --enforce`
-- API filtering/pagination (`/alerts?severity=high&limit=50`, `/trends?limit=...`)
-- `bundle --redact`
-- `doctor --fix-hints`
-- automated release artifacts workflow
-
-Use `pocketsoc --help` for full commands with descriptions.
+All commands include descriptions in `pocketsoc --help`.
