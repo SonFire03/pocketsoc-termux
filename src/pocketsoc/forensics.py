@@ -12,7 +12,13 @@ def build_forensics_snapshot(data_dir: Path) -> Path:
     root = Path(data_dir)
     out = root / f"forensics-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
 
-    payload = {"timestamp": datetime.utcnow().isoformat() + "Z", "processes": [], "sockets": [], "startup_files": {}}
+    payload: dict[str, object] = {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "processes": [],
+        "sockets": [],
+        "startup_files": {},
+    }
+    startup_files: dict[str, str] = {}
 
     if command_exists("ps"):
         ok, txt = run_command(["ps", "-A", "-o", "pid,ppid,comm"])
@@ -26,7 +32,8 @@ def build_forensics_snapshot(data_dir: Path) -> Path:
     for name in [".bashrc", ".zshrc", ".profile"]:
         p = Path.home() / name
         if p.exists():
-            payload["startup_files"][name] = p.read_text(encoding="utf-8", errors="ignore")[:4000]
+            startup_files[name] = p.read_text(encoding="utf-8", errors="ignore")[:4000]
+    payload["startup_files"] = startup_files
 
     raw = json.dumps(payload, indent=2)
     out.write_text(raw, encoding="utf-8")

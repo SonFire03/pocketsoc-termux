@@ -6,7 +6,7 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from .evidence_chain import append_evidence
-from .output.files import ensure_data_dir, load_alerts, load_last_scan
+from .output.files import ensure_data_dir
 from .timeline import build_timeline
 from .triage import load_triage
 

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from pocketsoc.bundle_sign import sign_bundle, verify_bundle
 
 

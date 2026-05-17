@@ -28,6 +28,11 @@ def test_config_help_works() -> None:
     assert r.exit_code == 0
 
 
+def test_maint_doctor_help_works() -> None:
+    r = runner.invoke(app, ["maint", "doctor", "--help"])
+    assert r.exit_code == 0
+
+
 def test_quick_demo_commands_are_available() -> None:
     assert runner.invoke(app, ["config", "init", "--help"]).exit_code == 0
     assert runner.invoke(app, ["scan", "run", "--help"]).exit_code == 0

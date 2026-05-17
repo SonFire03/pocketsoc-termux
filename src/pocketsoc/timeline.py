@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from .output.files import load_scan_history, ensure_data_dir
+from .output.files import load_scan_history
 from .triage import load_triage
 
 

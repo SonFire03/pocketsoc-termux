@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 def suppress_repeated_alerts(alerts: list[dict], history: list[dict], cooldown_minutes: int = 5) -> list[dict]:
@@ -10,6 +10,8 @@ def suppress_repeated_alerts(alerts: list[dict], history: list[dict], cooldown_m
     recent_ids: set[str] = set()
     for row in history[-20:]:
         ts = row.get("timestamp")
+        if not isinstance(ts, str):
+            continue
         try:
             t = datetime.fromisoformat(ts).timestamp()
         except Exception:

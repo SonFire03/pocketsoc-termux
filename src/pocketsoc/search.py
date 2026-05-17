@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from .output.files import load_alerts, load_last_scan, load_scan_history
+from .output.files import load_alerts, load_last_scan
 from .timeline import build_timeline
 from .triage import load_triage
 
@@ -17,7 +17,7 @@ def _cutoff(since: str) -> float:
 def global_search(query: str, since: str = "7d", data_dir=None) -> dict:
     q = query.lower()
     c = _cutoff(since)
-    out = {"alerts": [], "checks": [], "triage": [], "timeline": []}
+    out: dict[str, list[dict]] = {"alerts": [], "checks": [], "triage": [], "timeline": []}
 
     scan = load_last_scan(data_dir)
     for ch in scan.get("checks", []):

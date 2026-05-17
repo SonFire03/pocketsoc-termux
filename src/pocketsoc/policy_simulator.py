@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from .compliance_packs import PACKS
 from .output.files import load_scan_history
 
@@ -7,7 +9,8 @@ from .output.files import load_scan_history
 def simulate_policies(data_dir=None) -> dict:
     history = load_scan_history(data_dir)[-50:]
     results: dict[str, dict] = {}
-    for name, policy in PACKS.items():
+    packs: dict[str, dict[str, Any]] = PACKS
+    for name, policy in packs.items():
         fails = 0
         for row in history:
             row_failed = 0
