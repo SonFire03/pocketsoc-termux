@@ -4,6 +4,7 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from .output.files import load_alerts, load_last_scan, load_scan_history
 
@@ -29,17 +30,31 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._auth_ok():
             self._send({"error": "unauthorized"}, 401)
             return
-        if self.path == "/health":
+
+        parsed = urlparse(self.path)
+        qs = parse_qs(parsed.query)
+        path = parsed.path
+
+        if path == "/health":
             self._send({"ok": True})
             return
-        if self.path == "/last-scan":
+        if path == "/last-scan":
             self._send(load_last_scan(self.data_dir))
             return
-        if self.path == "/alerts":
-            self._send(load_alerts(self.data_dir))
+        if path == "/alerts":
+            payload = load_alerts(self.data_dir)
+            sev = qs.get("severity", [None])[0]
+            lim = int(qs.get("limit", ["200"])[0])
+            alerts = payload.get("alerts", [])
+            if sev:
+                alerts = [a for a in alerts if a.get("severity") == sev]
+            payload["alerts"] = alerts[:lim]
+            self._send(payload)
             return
-        if self.path == "/trends":
-            self._send({"items": load_scan_history(self.data_dir)[-50:]})
+        if path == "/trends":
+            items = load_scan_history(self.data_dir)
+            lim = int(qs.get("limit", ["50"])[0])
+            self._send({"items": items[-lim:]})
             return
         self._send({"error": "not found"}, 404)
 

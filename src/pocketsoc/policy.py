@@ -11,10 +11,7 @@ def write_default_policy(data_dir: Path | None = None, force: bool = False) -> P
     target = root / "policy.json"
     if target.exists() and not force:
         return target
-    policy = {
-        "max_outdated_packages": 5,
-        "deny_ports": ["5555", "23"],
-    }
+    policy = {"max_outdated_packages": 5, "deny_ports": ["5555", "23"]}
     target.write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8")
     return target
 

@@ -47,8 +47,8 @@ def _exit_on_alert_threshold(payload: dict, fail_on_alert: str) -> None:
 
 
 @app.command("doctor", help="Check local dependencies and Termux command availability.")
-def doctor() -> None:
-    console.print_json(data=run_doctor())
+def doctor(fix_hints: bool = typer.Option(False, "--fix-hints", help="Include actionable fix hints.")) -> None:
+    console.print_json(data=run_doctor(with_fix_hints=fix_hints))
 
 
 @app.command("autofix-safe", help="Apply non-destructive local fixes (config/rules/bootstrap files).")
@@ -97,11 +97,11 @@ def init_policy(data_dir: str | None = typer.Option(None, help="Override data di
 
 
 @app.command(help="Run a defensive local scan and persist signed artifacts.")
-def scan(data_dir: str | None = typer.Option(None, help="Override data directory."), profile: Literal["quick", "standard", "deep"] = typer.Option("standard", help="Scan profile."), time_profile: Literal["auto", "day", "night"] = typer.Option("auto", help="Temporal profile for threshold tuning."), since_last: bool = typer.Option(False, help="Only keep newly emerged alerts vs previous scan."), quiet: bool = typer.Option(False, help="Minimal output mode."), output: Literal["table", "json", "ndjson"] = typer.Option("table", help="Output format."), fail_on_alert: Literal["none", "low", "medium", "high"] = typer.Option("none", help="Exit code 2 if alerts reach severity."), redact: bool = typer.Option(False, help="Redact sensitive values in output."), notify: bool = typer.Option(True, help="Send local Termux notification on critical risk.")) -> None:
+def scan(data_dir: str | None = typer.Option(None, help="Override data directory."), profile: Literal["quick", "standard", "deep"] = typer.Option("standard", help="Scan profile."), time_profile: Literal["auto", "day", "night"] = typer.Option("auto", help="Temporal profile for threshold tuning."), since_last: bool = typer.Option(False, help="Only keep newly emerged alerts vs previous scan."), parallel: bool = typer.Option(False, help="Run checks in parallel for faster scans."), quiet: bool = typer.Option(False, help="Minimal output mode."), output: Literal["table", "json", "ndjson"] = typer.Option("table", help="Output format."), fail_on_alert: Literal["none", "low", "medium", "high"] = typer.Option("none", help="Exit code 2 if alerts reach severity."), redact: bool = typer.Option(False, help="Redact sensitive values in output."), notify: bool = typer.Option(True, help="Send local Termux notification on critical risk.")) -> None:
     root = _resolve_data_dir(data_dir)
     thresholds = load_threshold_config(root)
     hist = load_scan_history(root)
-    result = run_scan(thresholds, profile=profile, rules_data_dir=root, history=hist, since_last=since_last)
+    result = run_scan(thresholds, profile=profile, rules_data_dir=root, history=hist, since_last=since_last, parallel=parallel)
     if time_profile in ("auto", "night"):
         result.risk_score += 1
     save_scan(result, root)
@@ -124,6 +124,8 @@ def scan(data_dir: str | None = typer.Option(None, help="Override data directory
             hydrated = ScanResult(scan_payload.get("timestamp", "n/a"), [CheckResult(**c) for c in scan_payload.get("checks", [])], [Alert(**a) for a in alerts_payload.get("alerts", [])], alerts_payload.get("risk_score", calculate_risk_score([])))
             render_scan(hydrated)
             render_alerts(hydrated)
+            if "category_scores" in scan_payload:
+                console.print_json(data={"category_scores": scan_payload["category_scores"]})
             print(f"[green]Risk score:[/green] {hydrated.risk_score}")
 
     _exit_on_alert_threshold(alerts_payload, fail_on_alert)
@@ -160,8 +162,11 @@ def baseline_diff(data_dir: str | None = typer.Option(None, help="Override data 
 
 
 @app.command("policy-eval", help="Evaluate latest scan against local compliance policy.")
-def policy_eval(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
-    console.print_json(data=eval_policy(_resolve_data_dir(data_dir)))
+def policy_eval(data_dir: str | None = typer.Option(None, help="Override data directory."), enforce: bool = typer.Option(False, "--enforce", help="Exit non-zero if policy is not compliant.")) -> None:
+    res = eval_policy(_resolve_data_dir(data_dir))
+    console.print_json(data=res)
+    if enforce and not res.get("compliant", False):
+        raise typer.Exit(code=2)
 
 
 @app.command("history-prune", help="Prune scan history by age and/or max entries.")
@@ -176,9 +181,9 @@ def archive_rotate(data_dir: str | None = typer.Option(None, help="Override data
 
 
 @app.command("bundle", help="Build incident bundle ZIP from local artifacts.")
-def bundle(data_dir: str | None = typer.Option(None, help="Override data directory."), since: str = typer.Option("24h", help="Time hint metadata for analyst workflow.")) -> None:
+def bundle(data_dir: str | None = typer.Option(None, help="Override data directory."), since: str = typer.Option("24h", help="Time hint metadata for analyst workflow."), redact: bool = typer.Option(False, "--redact", help="Produce anonymized bundle copy.")) -> None:
     _ = since
-    print(f"[green]Bundle created:[/green] {build_incident_bundle(_resolve_data_dir(data_dir))}")
+    print(f"[green]Bundle created:[/green] {build_incident_bundle(_resolve_data_dir(data_dir), redact=redact)}")
 
 
 @app.command("schedule-install", help="Install local scheduled scan script and metadata.")
@@ -223,8 +228,8 @@ def alerts(data_dir: str | None = typer.Option(None, help="Override data directo
 
 
 @app.command("release-tag", help="Print semantic version tag and release note template.")
-def release_tag(version: str = typer.Option("v0.8.0", help="Target semver tag.")) -> None:
-    typer.echo(f"Tag: {version}\\nRelease notes: API auth, web dashboard, scan diff, deps verify, config backup/restore.")
+def release_tag(version: str = typer.Option("v0.9.0", help="Target semver tag.")) -> None:
+    typer.echo(f"Tag: {version}\\nRelease notes: parallel scan, category score, policy enforce, API filters, redacted bundles.")
 
 
 if __name__ == "__main__":
