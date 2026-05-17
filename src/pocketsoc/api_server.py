@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 from .data_quality import compute_data_quality
 from .output.files import ensure_data_dir, load_alerts, load_last_scan, load_scan_history
 from .rate_limit import SlidingRateLimiter
+from .timeline import build_timeline
 from .triage import upsert_alert_state
 
 START_TS = time.time()
@@ -33,8 +34,7 @@ class _Handler(BaseHTTPRequestHandler):
         return self.headers.get("X-PocketSOC-Token", "") == token
 
     def _rate_ok(self, endpoint: str) -> bool:
-        key = f"{self.client_address[0]}:{endpoint}"
-        return RL.allow(key)
+        return RL.allow(f"{self.client_address[0]}:{endpoint}")
 
     def _send(self, payload: dict, status: int = 200, endpoint: str = "") -> None:
         body = json.dumps(payload).encode("utf-8")
@@ -76,6 +76,11 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/trends":
             items = load_scan_history(self.data_dir)
             lim = int(qs.get("limit", ["50"])[0])
+            self._send({"items": items[-lim:]}, 200, path)
+            return
+        if path == "/timeline":
+            items = build_timeline(self.data_dir)
+            lim = int(qs.get("limit", ["200"])[0])
             self._send({"items": items[-lim:]}, 200, path)
             return
         if path == "/metrics":
