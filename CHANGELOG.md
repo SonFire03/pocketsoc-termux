@@ -1,15 +1,15 @@
 # Changelog
 
+## 0.7.0 - 2026-05-17
+
+- Added read-only local API server (`serve`) with `/health`, `/last-scan`, `/alerts`, `/trends`.
+- Added minimal local Web UI generator (`ui-build`).
+- Added plugin check loader via `checks.d/*.py` (`run_check`).
+- Added compliance policy initialization/evaluation (`init-policy`, `policy-eval`).
+- Added alert fatigue suppression cooldown.
+- Added archive rotation with gzip + signatures (`archive-rotate`).
+- Added incident bundle ZIP export (`bundle`).
+- Added extended command descriptions in `--help`.
+
 ## 0.6.0 - 2026-05-17
-
-- Added `doctor` command for environment diagnostics.
-- Added `autofix-safe` command for non-destructive local fixes.
-- Added SIEM export command (`export --fmt cef|syslog-json`).
-- Added Termux local notifications on high risk.
-- Added temporal scan profile option (`--time-profile auto|day|night`).
-- Added baseline multi-host metadata (`device_id`) and `--explain` diff mode.
-- Added dependency lock file (`requirements-lock.txt`).
-- Kept all command descriptions visible in `--help`.
-
-## 0.5.0 - 2026-05-17
-- Added signed artifacts, pruning, scheduling, and richer help.
+- Added doctor/autofix-safe/export/temporal-profile/baseline explain.

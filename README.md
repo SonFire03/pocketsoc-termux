@@ -2,28 +2,17 @@
 
 PocketSOC is a defensive, local-only monitoring CLI for Android Termux.
 
-## Commands (with help descriptions in `pocketsoc --help`)
+## Major Commands
 
-- `doctor`: check local dependencies/commands.
+- `doctor`: validate local dependencies.
 - `autofix-safe`: apply non-destructive bootstrap fixes.
-- `init-config`: create threshold presets.
-- `init-rules`: create custom rules template.
-- `scan`: run local signed scan (`--profile`, `--time-profile`, `--output ndjson`).
-- `dashboard`: summary + checks view.
-- `alerts`: alert table/JSON.
-- `report`: markdown report export.
-- `trends`: timeline view + `--csv` export.
-- `baseline-create`: create baseline with profile/device id.
-- `baseline-diff`: compare latest scan to baseline (`--explain`).
-- `history-prune`: retention by days/count.
-- `schedule-install`: install local scheduled scan script.
-- `verify-integrity`: verify signed payloads.
-- `export`: SIEM export (`cef` or `syslog-json`).
-- `release-tag`: release helper.
+- `serve`: read-only local API (`/health`, `/last-scan`, `/alerts`, `/trends`).
+- `ui-build`: generate minimal local web UI file.
+- `scan`: run signed defensive scans with profiles and output modes.
+- `policy-eval`: evaluate compliance policy.
+- `baseline-create` / `baseline-diff`: baseline workflow.
+- `archive-rotate`: compress/sign history archives.
+- `bundle`: generate incident bundle zip.
+- `export`: SIEM output (`cef` or `syslog-json`).
 
-## Security/Hardening
-
-- Signed scan artifacts (`.sig`) for tamper evidence.
-- Rules engine supports AND/OR + regex.
-- Baseline diff with tolerance and explanation.
-- Dependency lock file: `requirements-lock.txt`.
+Everything is visible with command descriptions in `pocketsoc --help`.
