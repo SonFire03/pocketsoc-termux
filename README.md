@@ -7,50 +7,21 @@ PocketSOC is a lightweight, defensive, local-only monitoring CLI for Android Ter
 ## What It Is
 
 - A small Python CLI (Typer + Rich) for local health and security visibility.
-- Local checks for storage, battery, network, listening ports, and running processes.
-- JSON alerts with risk scoring and deduplication.
-- Scan history and trend view.
-- Markdown report export with recommended actions.
-- Configurable local thresholds (`~/.pocketsoc/config.json`).
-
-## What It Is Not
-
-- Not an offensive security tool.
-- Not an exploit framework.
-- Not a vulnerability scanner.
-- Not an aggressive network scanner.
-- Not a remote attack or intrusion utility.
-
-## Safety and Intended Usage
-
-PocketSOC is designed for defensive, local checks on your own Termux environment. Use it only for monitoring systems and data you are authorized to inspect.
-
-Safety boundaries:
-
-- Local checks only.
-- No exploit logic.
-- No brute-force logic.
-- No remote scanning workflows.
-
-## Requirements
-
-- Python 3.10+
-- Termux-compatible environment
-
-## Installation
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .[dev]
-```
+- Local checks for storage, battery, network, listening ports, process inventory, sensitive permissions, package hygiene, startup persistence, outbound connections, and binary integrity.
+- JSON alerts with risk scoring, deduplication, and basic correlation.
+- Scan history, trend view, and CSV export.
+- Baseline create/diff workflow.
+- Configurable thresholds and custom rule engine.
 
 ## Commands
 
 ```bash
 pocketsoc init-config
+pocketsoc init-rules
 pocketsoc scan
 pocketsoc trends
+pocketsoc baseline-create
+pocketsoc baseline-diff
 pocketsoc dashboard
 pocketsoc report
 pocketsoc alerts
@@ -58,41 +29,36 @@ pocketsoc alerts
 
 ## Useful CLI Options
 
+- `pocketsoc scan --profile quick|standard|deep`
 - `pocketsoc scan --quiet`
 - `pocketsoc scan --output json`
 - `pocketsoc scan --fail-on-alert medium`
 - `pocketsoc scan --redact`
+- `pocketsoc trends --csv`
 - `pocketsoc alerts --table --redact`
 - `pocketsoc report --redact`
 
-Optional `--data-dir` is supported on all commands.
+## What It Is Not
 
-## Output Files
+- Not an offensive security tool.
+- Not an exploit framework.
+- Not an aggressive scanner.
+- Not a remote attack utility.
 
-By default, PocketSOC stores data in `~/.pocketsoc/`:
+## Safety
+
+- Local checks only.
+- No exploit logic.
+- No brute-force logic.
+- No remote scanning workflows.
+
+## Output Files (`~/.pocketsoc/`)
 
 - `config.json`
+- `rules.json`
 - `last_scan.json`
 - `scan-history.jsonl`
+- `baseline.json`
+- `trends.csv`
 - `alerts.json`
 - `pocketsoc-report.md`
-
-## Development
-
-Run quality checks:
-
-```bash
-ruff check .
-mypy src
-pytest
-```
-
-Enable git hooks:
-
-```bash
-pre-commit install
-```
-
-## License
-
-MIT

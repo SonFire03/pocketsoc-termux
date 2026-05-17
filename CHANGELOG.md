@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 - 2026-05-17
+
+- Added scan profiles: `quick`, `standard`, `deep`.
+- Added new local checks: sensitive permissions, package hygiene, startup persistence, outbound connections, binary integrity.
+- Added `init-rules` and custom rule engine from `rules.json`.
+- Added baseline workflow: `baseline-create`, `baseline-diff`.
+- Added trends CSV export with `trends --csv`.
+- Added correlated high-severity alert when sensitive ports and suspicious processes coexist.
+- Extended CLI help surface with new commands and options.
+
 ## 0.3.0 - 2026-05-17
 
 - Added scan history persistence in `scan-history.jsonl`.
@@ -24,7 +34,3 @@
 ## 0.1.0 - 2026-05-17
 
 - Initial release of PocketSOC for Termux.
-- Added Typer CLI with commands: `scan`, `dashboard`, `report`, `alerts`.
-- Implemented local defensive checks for storage, battery, network, ports, and processes.
-- Added JSON alert generation and Markdown report export.
-- Added tests and GitHub-ready project structure.

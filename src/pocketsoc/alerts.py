@@ -27,6 +27,8 @@ def calculate_risk_score(alerts: list[Alert]) -> int:
 
 def build_alerts(checks: list[CheckResult], thresholds: ThresholdConfig) -> list[Alert]:
     alerts: list[Alert] = []
+    found_sensitive_port = False
+    found_suspicious_proc = False
 
     for check in checks:
         if check.name == "storage_usage":
@@ -43,6 +45,8 @@ def build_alerts(checks: list[CheckResult], thresholds: ThresholdConfig) -> list
             ports = check.details.get("ports", [])
             if isinstance(ports, list):
                 exposed = [p for p in ports if any(key in p for key in CRITICAL_PORT_KEYWORDS)]
+                if exposed:
+                    found_sensitive_port = True
                 for entry in exposed:
                     alerts.append(Alert("ALERT-PORT-SENSITIVE", "medium", "Sensitive listening port detected", entry, check.name))
 
@@ -52,6 +56,27 @@ def build_alerts(checks: list[CheckResult], thresholds: ThresholdConfig) -> list
                 for proc in procs:
                     pl = proc.lower()
                     if any(key in pl for key in SUSPICIOUS_PROCESS_KEYWORDS):
+                        found_suspicious_proc = True
                         alerts.append(Alert("ALERT-PROC-SUSPICIOUS", "low", "Potentially risky process name", proc, check.name))
+
+        if check.name == "sensitive_permissions" and check.status == "warning":
+            alerts.append(Alert("ALERT-PERM-WEAK", "medium", "Weak permissions on sensitive files", check.summary, check.name))
+
+        if check.name == "package_hygiene" and check.status == "warning":
+            alerts.append(Alert("ALERT-PACKAGES-OUTDATED", "low", "Many outdated packages", check.summary, check.name))
+
+        if check.name == "local_persistence" and check.status == "warning":
+            alerts.append(Alert("ALERT-PERSISTENCE-SUSPECT", "medium", "Suspicious startup command found", check.summary, check.name))
+
+    if found_sensitive_port and found_suspicious_proc:
+        alerts.append(
+            Alert(
+                "ALERT-CORRELATED-EXPOSURE",
+                "high",
+                "Correlated network/process risk",
+                "Sensitive listening port and suspicious process observed in same scan",
+                "correlation",
+            )
+        )
 
     return _dedupe_alerts(alerts)

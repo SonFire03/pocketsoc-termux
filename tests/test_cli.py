@@ -12,7 +12,7 @@ runner = CliRunner()
 def test_scan_command_runs(monkeypatch, tmp_path) -> None:
     from pocketsoc.models import ScanResult
 
-    def fake_run_scan(_thresholds) -> ScanResult:
+    def fake_run_scan(_thresholds, profile="standard", rules_data_dir=None) -> ScanResult:
         from pocketsoc.models import CheckResult
 
         return ScanResult(
@@ -43,3 +43,11 @@ def test_init_config_creates_file(tmp_path) -> None:
 def test_trends_runs(tmp_path) -> None:
     result = runner.invoke(app, ["trends", "--data-dir", str(tmp_path)])
     assert result.exit_code == 0
+
+
+def test_help_lists_new_commands() -> None:
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "baseline-create" in result.stdout
+    assert "baseline-diff" in result.stdout
+    assert "init-rules" in result.stdout

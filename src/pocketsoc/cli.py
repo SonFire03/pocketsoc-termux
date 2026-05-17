@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import typer
 from rich import print
 from rich.console import Console
 
 from .alerts import calculate_risk_score
+from .baseline import create_baseline, diff_baseline, load_baseline
 from .config import load_threshold_config, write_default_config
-from .output.files import export_markdown_report, load_alerts, load_last_scan, load_scan_history, save_alerts, save_scan
+from .output.files import (
+    export_markdown_report,
+    export_trends_csv,
+    load_alerts,
+    load_last_scan,
+    load_scan_history,
+    save_alerts,
+    save_scan,
+)
 from .output.render import render_alerts, render_dashboard_summary, render_scan, render_trends
 from .redaction import redact_scan_data
+from .rules import write_default_rules
 from .scanner import run_scan
 
 
@@ -38,23 +49,33 @@ def _exit_on_alert_threshold(payload: dict, fail_on_alert: str) -> None:
 def init_config(
     data_dir: str | None = typer.Option(None, help="Override data directory."),
     force: bool = typer.Option(False, help="Overwrite existing config file."),
+    profile: Literal["balanced", "strict", "battery-saver"] = typer.Option("balanced", help="Threshold preset profile."),
 ) -> None:
-    root = _resolve_data_dir(data_dir)
-    target = write_default_config(root, force=force)
+    target = write_default_config(_resolve_data_dir(data_dir), force=force, profile=profile)
     print(f"[green]Config ready:[/green] {target}")
+
+
+@app.command("init-rules")
+def init_rules(
+    data_dir: str | None = typer.Option(None, help="Override data directory."),
+    force: bool = typer.Option(False, help="Overwrite existing rules file."),
+) -> None:
+    target = write_default_rules(_resolve_data_dir(data_dir), force=force)
+    print(f"[green]Rules ready:[/green] {target}")
 
 
 @app.command()
 def scan(
     data_dir: str | None = typer.Option(None, help="Override data directory."),
+    profile: Literal["quick", "standard", "deep"] = typer.Option("standard", help="Scan profile."),
     quiet: bool = typer.Option(False, help="Minimal output mode."),
-    output: str = typer.Option("table", help="Output format: table or json."),
-    fail_on_alert: str = typer.Option("none", help="Fail if alerts >= severity: none|low|medium|high."),
-    redact: bool = typer.Option(False, help="Redact sensitive values in displayed/saved report outputs."),
+    output: Literal["table", "json"] = typer.Option("table", help="Output format."),
+    fail_on_alert: Literal["none", "low", "medium", "high"] = typer.Option("none", help="Fail if alerts >= severity."),
+    redact: bool = typer.Option(False, help="Redact sensitive values in output."),
 ) -> None:
     root = _resolve_data_dir(data_dir)
     thresholds = load_threshold_config(root)
-    result = run_scan(thresholds)
+    result = run_scan(thresholds, profile=profile, rules_data_dir=root)
     save_scan(result, root)
     save_alerts(result, root)
 
@@ -83,7 +104,6 @@ def scan(
 def dashboard(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
     root = _resolve_data_dir(data_dir)
     scan_data = load_last_scan(root)
-
     if not scan_data:
         print("[yellow]No scan found. Run 'pocketsoc scan' first.[/yellow]")
         raise typer.Exit(code=1)
@@ -98,9 +118,40 @@ def dashboard(data_dir: str | None = typer.Option(None, help="Override data dire
 
 
 @app.command()
-def trends(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+def trends(
+    data_dir: str | None = typer.Option(None, help="Override data directory."),
+    csv: bool = typer.Option(False, "--csv", help="Export trends to CSV."),
+) -> None:
     root = _resolve_data_dir(data_dir)
-    render_trends(load_scan_history(root))
+    history = load_scan_history(root)
+    render_trends(history)
+    if csv:
+        target = export_trends_csv(history, root)
+        print(f"[green]CSV exported:[/green] {target}")
+
+
+@app.command("baseline-create")
+def baseline_create(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+    root = _resolve_data_dir(data_dir)
+    if not load_last_scan(root):
+        print("[yellow]No scan found. Run 'pocketsoc scan' first.[/yellow]")
+        raise typer.Exit(code=1)
+    target = create_baseline(root)
+    print(f"[green]Baseline saved:[/green] {target}")
+
+
+@app.command("baseline-diff")
+def baseline_diff(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+    root = _resolve_data_dir(data_dir)
+    current = load_last_scan(root)
+    baseline = load_baseline(root)
+    if not current:
+        print("[yellow]No scan found. Run 'pocketsoc scan' first.[/yellow]")
+        raise typer.Exit(code=1)
+    if not baseline:
+        print("[yellow]No baseline found. Run 'pocketsoc baseline-create' first.[/yellow]")
+        raise typer.Exit(code=1)
+    console.print_json(data=diff_baseline(current, baseline))
 
 
 @app.command()
@@ -110,7 +161,6 @@ def report(
 ) -> None:
     root = _resolve_data_dir(data_dir)
     scan_data = load_last_scan(root)
-
     if not scan_data:
         print("[yellow]No scan found. Run 'pocketsoc scan' first.[/yellow]")
         raise typer.Exit(code=1)

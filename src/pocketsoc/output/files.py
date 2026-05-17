@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from dataclasses import asdict
 from datetime import datetime
@@ -13,6 +14,7 @@ ALERTS_FILE = "alerts.json"
 LAST_SCAN_FILE = "last_scan.json"
 HISTORY_FILE = "scan-history.jsonl"
 REPORT_FILE = "pocketsoc-report.md"
+TRENDS_CSV_FILE = "trends.csv"
 
 
 def ensure_data_dir(data_dir: Path | None = None) -> Path:
@@ -32,7 +34,8 @@ def save_scan(scan: ScanResult, data_dir: Path | None = None) -> Path:
 def append_scan_history(scan: ScanResult, data_dir: Path | None = None) -> Path:
     root = ensure_data_dir(data_dir)
     target = root / HISTORY_FILE
-    target.write_text((target.read_text(encoding="utf-8") if target.exists() else "") + json.dumps(asdict(scan)) + "\n", encoding="utf-8")
+    with target.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(asdict(scan)) + "\n")
     return target
 
 
@@ -51,6 +54,22 @@ def load_scan_history(data_dir: Path | None = None) -> list[dict]:
         except json.JSONDecodeError:
             continue
     return rows
+
+
+def export_trends_csv(history: list[dict], data_dir: Path | None = None) -> Path:
+    root = ensure_data_dir(data_dir)
+    target = root / TRENDS_CSV_FILE
+    with target.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["timestamp", "alerts", "risk_score", "storage_used_pct"])
+        for item in history:
+            storage = ""
+            for check in item.get("checks", []):
+                if check.get("name") == "storage_usage":
+                    storage = check.get("details", {}).get("used_pct", "")
+                    break
+            writer.writerow([item.get("timestamp", ""), len(item.get("alerts", [])), item.get("risk_score", 0), storage])
+    return target
 
 
 def save_alerts(scan: ScanResult, data_dir: Path | None = None) -> Path:
@@ -109,13 +128,7 @@ def export_markdown_report(scan: dict, alerts: dict, data_dir: Path | None = Non
         for entry in top:
             lines.append(f"- {entry.get('severity', 'n/a').upper()} {entry.get('title', 'n/a')} ({entry.get('source_check', 'n/a')})")
 
-    lines.extend([
-        "",
-        "## Check Results",
-        "",
-        "| Check | Status | Summary |",
-        "| --- | --- | --- |",
-    ])
+    lines.extend(["", "## Check Results", "", "| Check | Status | Summary |", "| --- | --- | --- |"])
 
     for check in scan.get("checks", []):
         lines.append(f"| {check.get('name')} | {check.get('status')} | {check.get('summary')} |")
@@ -129,15 +142,7 @@ def export_markdown_report(scan: dict, alerts: dict, data_dir: Path | None = Non
         for alert in alerts.get("alerts", []):
             lines.append(f"| {alert.get('id')} | {alert.get('severity')} | {alert.get('title')} | {alert.get('source_check')} |")
 
-    lines.extend([
-        "",
-        "## Recommended Actions",
-        "",
-        "- Review high severity alerts first.",
-        "- Close unnecessary listening services.",
-        "- Free storage when above critical threshold.",
-        "- Keep Termux packages and Android updated.",
-    ])
+    lines.extend(["", "## Recommended Actions", "", "- Review high severity alerts first.", "- Close unnecessary listening services.", "- Free storage when above critical threshold.", "- Keep Termux packages and Android updated."])
 
     target.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return target
