@@ -63,10 +63,14 @@ Note: actual output depends on your local device state.
 Screenshot capture guide: [docs/screenshots/README.md](docs/screenshots/README.md)
 
 Recommended files:
-- `docs/screenshots/scan-dashboard.png`
-- `docs/screenshots/alerts-table.png`
-- `docs/screenshots/report-preview.png`
-- `docs/screenshots/api-health.png`
+- <img width="611" height="573" alt="image" src="https://github.com/user-attachments/assets/abc0d426-2d16-4b5a-84cd-b86ec35675f6" />
+
+- <img width="617" height="282" alt="image" src="https://github.com/user-attachments/assets/5444cfe6-90c4-4298-b994-8a34cee105a4" />
+
+- <img width="617" height="282" alt="image" src="https://github.com/user-attachments/assets/e627f7fb-35d4-46e7-a80e-352d54f82dd5" />
+
+- <img width="620" height="313" alt="image" src="https://github.com/user-attachments/assets/72f89a36-d71b-4223-abb7-615b36b12eda" />
+
 
 Only real screenshots should be used.
 
