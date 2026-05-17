@@ -1,15 +1,13 @@
 # Changelog
 
+## 1.3.0 - 2026-05-17
+
+- Added triage board persistence with status/owner/comment history and SLA model.
+- Added API `POST /alert-state` for alert workflow updates.
+- Enriched local web UI with filters and inline ack action.
+- Added incident timeline output command.
+- Added evidence hash-chain append/verify.
+- Added optional encrypted bundle output.
+
 ## 1.2.0 - 2026-05-17
-
-- Added `scan plan` for pre-execution check plan visibility.
-- Added retry/backoff for transient scan checks.
-- Added `report diff` to compare two scan files directly.
-- Added API `/metrics` endpoint.
-- Added `report audit-export` for API audit log export (JSON/CSV).
-- Added suppression management (`suppress-list`, `suppress-remove`).
-- Added `forensics-verify` command.
-- Added global safety lock (`POCKETSOC_READONLY=1`) for mutating commands.
-
-## 1.1.1 - 2026-05-17
-- Reorganized CLI help into functional categories.
+- Added scan plan/retry, metrics, audit export, suppression management, readonly lock.

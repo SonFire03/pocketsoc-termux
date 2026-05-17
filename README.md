@@ -1,13 +1,12 @@
 # PocketSOC for Termux
 
-## v1.1.0 Highlights
+## v1.3.0 Highlights
 
-- `watch --interval`
-- suppression rules with expiration (`suppress-add`)
-- `forensics-lite` signed snapshots
-- `integrity-monitor`
-- `data_quality` and offline sensitive package hints in inventory
-- API audit log
-- `--dry-run` on mutating commands (`autofix-safe`, `history-prune`, `archive-rotate`)
+- triage board states with SLA model (`new`, `investigating`, `mitigated`, `false_positive`)
+- API `POST /alert-state`
+- enriched web UI with inline ack flow
+- incident timeline command
+- evidence hash chain verification
+- encrypted bundle output option
 
-Use `pocketsoc --help` for all command descriptions.
+Use `pocketsoc --help` for category-based commands.

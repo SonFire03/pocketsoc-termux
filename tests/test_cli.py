@@ -8,13 +8,20 @@ from pocketsoc.cli import app
 runner = CliRunner()
 
 
-def test_help_lists_new_commands() -> None:
+def test_help_has_new_commands() -> None:
     r = runner.invoke(app, ["--help"])
     assert r.exit_code == 0
-    for cmd in ["watch", "suppress-add", "forensics-lite", "integrity-monitor", "bundle-verify"]:
+    for cmd in ["scan", "report", "baseline", "api", "maint", "config"]:
         assert cmd in r.stdout
 
 
-def test_mutating_help_has_dry_run() -> None:
-    r = runner.invoke(app, ["history-prune", "--help"])
-    assert "--dry-run" in r.stdout
+def test_report_help_has_diff_and_timeline() -> None:
+    r = runner.invoke(app, ["report", "--help"])
+    assert "diff" in r.stdout
+    assert "timeline" in r.stdout
+
+
+def test_config_help_has_suppress_manage() -> None:
+    r = runner.invoke(app, ["config", "--help"])
+    assert "suppress-list" in r.stdout
+    assert "suppress-remove" in r.stdout

@@ -22,6 +22,7 @@ from .config import load_threshold_config, write_default_config
 from .configio import backup_config, restore_config
 from .deps import verify_lock
 from .doctor import run_doctor
+from .evidence_chain import verify_chain
 from .explain import explain_alert
 from .exporters import export_siem
 from .forensics import build_forensics_snapshot
@@ -39,6 +40,7 @@ from .scanner import run_scan, scan_plan
 from .scheduler import install_schedule
 from .suppress import add_suppression
 from .suppress_manage import list_suppressions, remove_suppression
+from .timeline import build_timeline
 from .webui import write_web_ui
 
 app = typer.Typer(help="PocketSOC CLI")
@@ -159,6 +161,11 @@ def report_diff(scan_a: str, scan_b: str) -> None:
     console.print_json(data=diff_scans(load_scan_file(Path(scan_a)), load_scan_file(Path(scan_b))))
 
 
+@report_app.command("timeline", help="Render incident timeline from scans + triage actions.")
+def report_timeline(data_dir: str | None = typer.Option(None)) -> None:
+    console.print_json(data={"events": build_timeline(_resolve_data_dir(data_dir))})
+
+
 @report_app.command("trends", help="Display trends and optionally export CSV.")
 def report_trends(data_dir: str | None = typer.Option(None), csv: bool = typer.Option(False, "--csv")) -> None:
     root = _resolve_data_dir(data_dir)
@@ -179,11 +186,11 @@ def report_audit_export(data_dir: str | None = typer.Option(None), fmt: Literal[
 
 
 @report_app.command("bundle", help="Build incident bundle ZIP from local artifacts.")
-def report_bundle(data_dir: str | None = typer.Option(None), since: str = typer.Option("24h"), redact: bool = typer.Option(False, "--redact"), sign: bool = typer.Option(True, "--sign/--no-sign")) -> None:
+def report_bundle(data_dir: str | None = typer.Option(None), since: str = typer.Option("24h"), redact: bool = typer.Option(False, "--redact"), sign: bool = typer.Option(True, "--sign/--no-sign"), encrypt_password: str = typer.Option("", "--encrypt-password", help="Optional password to encrypt resulting bundle.")) -> None:
     guard_mutation()
     root = _resolve_data_dir(data_dir)
     _ = since
-    out = build_incident_bundle(root, redact=redact)
+    out = build_incident_bundle(root, redact=redact, encrypt_password=encrypt_password)
     if sign:
         sig = sign_bundle(out, root)
         print(f"[green]Bundle created:[/green] {out}\n[green]Signature:[/green] {sig}")
@@ -242,6 +249,11 @@ def maint_doctor(fix_hints: bool = typer.Option(False, "--fix-hints")) -> None:
 @maint_app.command("integrity-monitor", help="Check integrity status of signed artifacts and bundles.")
 def maint_integrity_monitor(data_dir: str | None = typer.Option(None)) -> None:
     console.print_json(data=run_integrity_monitor(_resolve_data_dir(data_dir)))
+
+
+@maint_app.command("evidence-verify", help="Verify chronological hash-chain of evidence events.")
+def maint_evidence_verify(data_dir: str | None = typer.Option(None)) -> None:
+    console.print_json(data=verify_chain(_resolve_data_dir(data_dir)))
 
 
 @maint_app.command("verify-integrity", help="Verify signatures for scan and alerts payloads.")
