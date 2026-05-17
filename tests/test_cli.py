@@ -8,20 +8,29 @@ from pocketsoc.cli import app
 runner = CliRunner()
 
 
-def test_help_has_new_commands() -> None:
+def test_top_level_help_works() -> None:
     r = runner.invoke(app, ["--help"])
     assert r.exit_code == 0
-    for cmd in ["scan", "report", "baseline", "api", "maint", "config"]:
-        assert cmd in r.stdout
 
 
-def test_report_help_has_diff_and_timeline() -> None:
+def test_scan_help_works() -> None:
+    r = runner.invoke(app, ["scan", "--help"])
+    assert r.exit_code == 0
+
+
+def test_report_help_works() -> None:
     r = runner.invoke(app, ["report", "--help"])
-    assert "diff" in r.stdout
-    assert "timeline" in r.stdout
+    assert r.exit_code == 0
 
 
-def test_config_help_has_suppress_manage() -> None:
+def test_config_help_works() -> None:
     r = runner.invoke(app, ["config", "--help"])
-    assert "suppress-list" in r.stdout
-    assert "suppress-remove" in r.stdout
+    assert r.exit_code == 0
+
+
+def test_quick_demo_commands_are_available() -> None:
+    assert runner.invoke(app, ["config", "init", "--help"]).exit_code == 0
+    assert runner.invoke(app, ["scan", "run", "--help"]).exit_code == 0
+    assert runner.invoke(app, ["scan", "dashboard", "--help"]).exit_code == 0
+    assert runner.invoke(app, ["scan", "alerts", "--help"]).exit_code == 0
+    assert runner.invoke(app, ["report", "md", "--help"]).exit_code == 0

@@ -2,98 +2,79 @@
 
 > Lightweight defensive SOC toolkit for Android Termux: local monitoring, triage, evidence, and reporting.
 
-PocketSOC is a defensive, local-first security operations toolkit for Android Termux.
-It provides continuous host visibility, structured alerting, triage workflow, evidence handling, and export/reporting capabilities with zero offensive functionality.
+PocketSOC is a local-first defensive monitoring toolkit for Android Termux.
+It helps with visibility, triage, and evidence-oriented workflows using local telemetry and defensive-only logic.
 
-## Table of Contents
-- [Overview](#overview)
-- [Security Model](#security-model)
-- [Feature Set](#feature-set)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [CLI Command Map](#cli-command-map)
-- [Operational Workflows](#operational-workflows)
-- [API Reference](#api-reference)
-- [Data, Integrity, and Evidence](#data-integrity-and-evidence)
-- [Configuration](#configuration)
-- [Compliance and Policy](#compliance-and-policy)
-- [Release and Quality](#release-and-quality)
-- [Troubleshooting](#troubleshooting)
-- [License](#license)
+## What PocketSOC is
+- A personal defensive monitoring toolkit for Android Termux.
+- Suitable for home-lab, learning, and local visibility use cases.
+- Focused on local checks, triage workflow, and report/export operations.
 
-## Overview
-PocketSOC is designed for practitioners who need a lightweight SOC-like experience directly in Termux:
+## What PocketSOC is not
+- Not an offensive framework.
+- Not an exploit toolkit.
+- Not a brute-force toolkit.
+- Not an aggressive network scanner.
+- Not a replacement for enterprise EDR, MDM, SIEM, or professional forensic platforms.
 
-- Local telemetry collection (storage, battery, process, ports, network, package hygiene, persistence indicators)
-- Alert generation with severity and risk scoring
-- Triage lifecycle management (status, owner, SLA, comments, templates)
-- Signed artifacts and chain-of-evidence primitives
-- API/UI surfaces for local investigation
-- Incident packaging, reporting, and SIEM-friendly exports
+## Project Status / Maturity
+PocketSOC is a personal defensive monitoring toolkit for Android Termux. It is suitable for home-lab, learning, and local visibility use cases. It is not a replacement for enterprise EDR, MDM, SIEM, or professional forensic platforms.
 
-Target use cases:
-- Personal mobile security monitoring
-- Home-lab endpoint telemetry
-- Local forensic-lite snapshots
-- Automated local compliance checks
+Current maturity:
+- Actively evolving CLI with categorized command groups.
+- Defensive checks and triage workflow are usable for demos and local operations.
+- Experimental for broader production workflows.
 
-## Security Model
-PocketSOC is intentionally defensive and constrained.
+## Demo
+See full demo guide: [docs/demo.md](docs/demo.md)
 
-What it does:
-- Local inspection only
-- Passive data collection from host commands
-- Signed evidence and integrity checks
-- Structured triage and reporting
+### Quick Demo Commands
+```bash
+pocketsoc config init
+pocketsoc scan run --profile standard
+pocketsoc scan dashboard
+pocketsoc scan alerts --table
+pocketsoc report md --format executive
+```
 
-What it does not do:
-- No exploitation logic
-- No brute-force tooling
-- No aggressive network scanning
-- No remote offensive actions
+These commands are implemented in the current CLI.
 
-## Feature Set
-### Detection and Monitoring
-- Profile-based scans: `quick`, `standard`, `deep`
-- Optional parallel collection and retry/backoff for transient checks
-- Statistical anomaly overlays and burst detection
-- Category-level health scoring
+## Example Output
+Representative terminal flow:
 
-### Triage and Response
-- Persistent triage board with statuses:
-  - `new`, `investigating`, `mitigated`, `false_positive`
-- Auto-routing by severity/check type
-- Transition guardrails (state-machine validation)
-- Comment templates and templated triage apply
-- SLA dashboard (overdue count, MTTR, opened/closed)
+```text
+$ pocketsoc scan run --profile standard
+PocketSOC Scan (...timestamp...)
+- storage_usage: ok
+- battery_info: ok
+- listening_ports: warning
+...
+Risk score: 14
 
-### Integrity and Evidence
-- Signed scan and alert artifacts
-- Integrity monitor for artifacts and bundle signatures
-- Forensics-lite signed snapshots
-- Incident timeline generation
-- Evidence hash-chain verification
+$ pocketsoc scan alerts --table
+PocketSOC Alerts
+- ALERT-PORT-SENSITIVE (medium)
+- ALERT-PACKAGES-OUTDATED (low)
+```
 
-### Reporting and Exports
-- Markdown reports (`full`, `executive`, baseline comparison)
-- Direct scan-to-scan diff reports
-- CSV trends export
-- SIEM export (`cef`, `syslog-json`)
-- Incident bundle and incident pack exports
+Note: actual output depends on your local device state.
 
-### API and UI
-- Local API with token auth support
-- Built-in rate limiting (`429` on exceeded budget)
-- Endpoints for scans, alerts, trends, metrics, timeline
-- `POST /alert-state` for triage updates
-- Local web UI generation with filters and inline ack action
+## Screenshots
+Screenshot capture guide: [docs/screenshots/README.md](docs/screenshots/README.md)
+
+Recommended files:
+- `docs/screenshots/scan-dashboard.png`
+- `docs/screenshots/alerts-table.png`
+- `docs/screenshots/report-preview.png`
+- `docs/screenshots/api-health.png`
+
+Only real screenshots should be used.
+
+## Example Report
+- Sample report (documentation-safe): [examples/sample-report.md](examples/sample-report.md)
+- Examples index: [examples/README.md](examples/README.md)
 
 ## Installation
-### Requirements
-- Python 3.10+
-- Termux environment
-
-### Setup
 ```bash
 pkg update -y
 pkg install -y git python
@@ -106,178 +87,36 @@ source .venv/bin/activate
 pip install -e .[dev]
 ```
 
-Optional Termux integrations:
+If `python` is unavailable on your system shell, use `python3`.
+
+Optional Termux integration:
 ```bash
 pkg install -y termux-api
 ```
-Also install the Android **Termux:API** app for notification/battery APIs.
-
-## Quick Start
-```bash
-# 1) initialize local config artifacts
-pocketsoc config init
-pocketsoc config rules
-pocketsoc config policy --pack home-lab
-
-# 2) run a scan
-pocketsoc scan run --profile standard
-
-# 3) view posture
-pocketsoc scan dashboard
-pocketsoc scan alerts --table
-
-# 4) export report
-pocketsoc report md --format executive
-```
 
 ## CLI Command Map
-PocketSOC commands are grouped by category for discoverability.
+Commands are grouped for readability:
+- `scan`: scan and triage operations
+- `report`: reporting and export operations
+- `baseline`: baseline/policy workflows
+- `api`: local API and UI helpers
+- `maint`: integrity/maintenance/quality tooling
+- `config`: setup and local configuration
 
-- `scan`:
-  - `plan`, `run`, `watch`, `dashboard`, `alerts`, `search`, `explain-alert`, `triage-apply`, `triage-template`
-- `report`:
-  - `md`, `diff`, `timeline`, `sla`, `triage-analytics`, `trends`, `export`, `audit-export`, `incident-pack`, `bundle`, `bundle-decrypt`, `bundle-verify`
-- `baseline`:
-  - `create`, `diff`, `policy-eval`, `policy-sim`
-- `api`:
-  - `serve`, `key-rotate`, `ui-build`
-- `maint`:
-  - `doctor`, `integrity-monitor`, `verify-integrity`, `evidence-verify`, `forensics-lite`, `forensics-verify`, `history-prune`, `archive-rotate`, `schedule-install`, `release-notes`, `quality-gate`, `self-check`
-- `config`:
-  - `init`, `rules`, `policy`, `comment-templates`, `backup`, `backup-verify`, `restore`, `deps-verify`, `suppress-add`, `suppress-list`, `suppress-remove`, `autofix-safe`
-
-Get full help anytime:
+Explore:
 ```bash
 pocketsoc --help
 pocketsoc scan --help
+pocketsoc report --help
+pocketsoc config --help
 ```
 
-## Operational Workflows
-### Continuous Monitoring
-```bash
-pocketsoc scan watch --interval 120 --profile standard
-```
-
-### Triage Loop
-```bash
-pocketsoc scan alerts --json
-pocketsoc scan triage-apply ALERT-ID high --status investigating --owner oncall
-pocketsoc report sla
-```
-
-### Incident Handling
-```bash
-pocketsoc report timeline
-pocketsoc maint forensics-lite
-pocketsoc report incident-pack
-pocketsoc report bundle --redact --encrypt-password 'strong-passphrase'
-pocketsoc report bundle-verify /path/to/bundle.zip.enc
-```
-
-## API Reference
-Default bind:
-```bash
-pocketsoc api serve --host 127.0.0.1 --port 8787
-```
-
-Authentication:
-- Set `POCKETSOC_API_TOKEN` to enforce token checks
-- Send header `X-PocketSOC-Token: <token>`
-
-Endpoints:
-- `GET /health`
-- `GET /last-scan`
-- `GET /alerts?severity=high&limit=50`
-- `GET /trends?limit=50`
-- `GET /timeline?limit=200`
-- `GET /metrics`
-- `POST /alert-state`
-
-Rate limiting:
-- Sliding-window limiter per `client_ip:endpoint`
-- Exceeded budget returns `429`
-
-## Data, Integrity, and Evidence
-Default data directory:
-- `~/.pocketsoc/`
-
-Typical files:
-- `last_scan.json`, `last_scan.json.sig`
-- `alerts.json`, `alerts.json.sig`
-- `scan-history.jsonl`
-- `triage-board.json`
-- `api-audit.log`
-- `evidence-chain.jsonl`
-- `baseline.json`
-- `pocketsoc-report.md`
-
-Verification commands:
-```bash
-pocketsoc maint verify-integrity
-pocketsoc maint integrity-monitor
-pocketsoc maint evidence-verify
-```
-
-## Configuration
-Bootstrap:
-```bash
-pocketsoc config init
-pocketsoc config rules
-pocketsoc config policy --pack strict-mobile
-```
-
-Suppression management:
-```bash
-pocketsoc config suppress-add "ALERT-PROC-SUSPICIOUS"
-pocketsoc config suppress-list
-pocketsoc config suppress-remove 1
-```
-
-Read-only lock (safety mode):
-```bash
-export POCKETSOC_READONLY=1
-```
-This blocks mutating commands until unset.
-
-## Compliance and Policy
-Evaluate current state:
-```bash
-pocketsoc baseline policy-eval --baseline-aware
-```
-
-Simulate policy packs on history:
-```bash
-pocketsoc baseline policy-sim
-```
-
-## Release and Quality
-Project quality gates:
-```bash
-pytest -q
-pocketsoc maint quality-gate
-```
-
-Generate release-note draft from changelog:
-```bash
-pocketsoc maint release-notes
-```
-
-## Troubleshooting
-### Missing Termux commands
-Run:
-```bash
-pocketsoc maint doctor --fix-hints
-```
-
-### Backup integrity
-```bash
-pocketsoc config backup
-pocketsoc config backup-verify
-```
-
-### Encrypted bundle decryption failure
-- Verify password correctness
-- Ensure `cryptography` is installed
+## Safety Constraints
+- Local checks only.
+- No exploitation logic.
+- No brute-force tooling.
+- No aggressive network scanning.
+- No remote offensive actions.
 
 ## License
 MIT
