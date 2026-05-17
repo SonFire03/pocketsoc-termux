@@ -1,13 +1,13 @@
 # Changelog
 
+## 1.3.1 - 2026-05-17
+
+- Added triage auto-routing and workflow transition guard.
+- Added comment templates and compliance policy packs.
+- Added API rate-control groundwork and `POST /alert-state` workflow endpoint.
+- Added incident workspace improvements in local UI.
+- Added signed evidence manifest in bundles.
+- Upgraded bundle encryption to AES-GCM (`cryptography` required when enabled).
+
 ## 1.3.0 - 2026-05-17
-
-- Added triage board persistence with status/owner/comment history and SLA model.
-- Added API `POST /alert-state` for alert workflow updates.
-- Enriched local web UI with filters and inline ack action.
-- Added incident timeline output command.
-- Added evidence hash-chain append/verify.
-- Added optional encrypted bundle output.
-
-## 1.2.0 - 2026-05-17
-- Added scan plan/retry, metrics, audit export, suppression management, readonly lock.
+- Added triage workflow, alert-state API, timeline, evidence chain, and encrypted bundles.

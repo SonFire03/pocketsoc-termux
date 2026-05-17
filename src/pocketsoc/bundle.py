@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -12,9 +14,21 @@ from .redaction import redact_scan_data
 from .timeline import build_timeline
 
 
+def _manifest(root: Path, files: list[Path]) -> Path:
+    rows = []
+    for p in files:
+        if p.exists() and p.is_file():
+            rows.append({"name": p.name, "sha256": hashlib.sha256(p.read_bytes()).hexdigest(), "size": p.stat().st_size})
+    out = root / "manifest.json"
+    out.write_text(json.dumps({"generated_at": datetime.utcnow().isoformat() + "Z", "files": rows}, indent=2) + "\n", encoding="utf-8")
+    return out
+
+
 def build_incident_bundle(data_dir: Path | None = None, redact: bool = False, encrypt_password: str = "") -> Path:
     root = ensure_data_dir(data_dir)
     out = root / f"incident-bundle-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
+
+    artifacts = []
     with ZipFile(out, "w", compression=ZIP_DEFLATED) as zf:
         scan = load_last_scan(root)
         alerts = load_alerts(root)
@@ -26,18 +40,26 @@ def build_incident_bundle(data_dir: Path | None = None, redact: bool = False, en
             tmp_alerts.write_text(str(alerts), encoding="utf-8")
             zf.write(tmp_scan, arcname="last_scan_redacted.json")
             zf.write(tmp_alerts, arcname="alerts_redacted.json")
-            tmp_scan.unlink(missing_ok=True)
-            tmp_alerts.unlink(missing_ok=True)
+            artifacts.extend([tmp_scan, tmp_alerts])
+
         for name in ["last_scan.json", "alerts.json", "pocketsoc-report.md", "scan-history.jsonl", "baseline.json"]:
             p = root / name
             if p.exists():
                 zf.write(p, arcname=name)
+                artifacts.append(p)
 
         tl = build_timeline(root)
         tmp_tl = root / "timeline.json"
-        tmp_tl.write_text(str(tl), encoding="utf-8")
+        tmp_tl.write_text(json.dumps(tl, indent=2), encoding="utf-8")
         zf.write(tmp_tl, arcname="timeline.json")
-        tmp_tl.unlink(missing_ok=True)
+        artifacts.append(tmp_tl)
+
+        manifest = _manifest(root, artifacts)
+        zf.write(manifest, arcname="manifest.json")
+        artifacts.append(manifest)
+
+    for p in [root / "_bundle_scan_redacted.json", root / "_bundle_alerts_redacted.json", root / "timeline.json", root / "manifest.json"]:
+        p.unlink(missing_ok=True)
 
     if encrypt_password:
         out = encrypt_file(out, encrypt_password)

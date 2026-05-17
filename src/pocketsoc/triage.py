@@ -5,14 +5,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .output.files import ensure_data_dir
+from .triage_fsm import validate_transition
+from .triage_rules import auto_route
 
 TRIAGE_FILE = "triage-board.json"
 
-DEFAULT_SLA_HOURS = {
-    "high": 4,
-    "medium": 24,
-    "low": 72,
-}
+DEFAULT_SLA_HOURS = {"high": 4, "medium": 24, "low": 72}
 
 
 def _now() -> datetime:
@@ -42,11 +40,15 @@ def save_triage(payload: dict, data_dir: Path | None = None) -> Path:
     return p
 
 
-def upsert_alert_state(alert_id: str, severity: str, status: str = "new", owner: str = "", comment: str = "", data_dir: Path | None = None) -> dict:
+def upsert_alert_state(alert_id: str, severity: str, status: str = "new", owner: str = "", comment: str = "", source_check: str = "", data_dir: Path | None = None) -> dict:
     board = load_triage(data_dir)
     items = board["items"]
     now = _now().isoformat()
     due = (_now() + timedelta(hours=DEFAULT_SLA_HOURS.get(severity, 24))).isoformat()
+
+    route = auto_route(severity, source_check)
+    owner = owner or route["owner"]
+    status = status or route["status"]
 
     existing = next((x for x in items if x.get("alert_id") == alert_id), None)
     if existing is None:
@@ -65,13 +67,17 @@ def upsert_alert_state(alert_id: str, severity: str, status: str = "new", owner:
         save_triage(board, data_dir)
         return entry
 
+    ok, msg = validate_transition(existing.get("status", "new"), status, comment)
+    if not ok:
+        return {"error": msg, "alert_id": alert_id}
+
     existing["status"] = status or existing.get("status", "new")
     if owner:
         existing["owner"] = owner
     if comment:
         existing["comment"] = comment
     existing["updated_at"] = now
-    existing.setdefault("history", []).append({"ts": now, "status": existing["status"], "owner": existing.get("owner", ""), "comment": comment})
+    existing.setdefault("history", []).append({"ts": now, "status": existing["status"], "owner": existing.get("owner", ""), "comment": comment or msg})
     save_triage(board, data_dir)
     return existing
 
