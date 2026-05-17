@@ -1,14 +1,13 @@
 # PocketSOC for Termux
 
-## v1.0.0 Highlights
+## v1.1.0 Highlights
 
-- `scan --timeout`
-- `scan --resource-profile low|balanced|high`
-- signed incident bundles + `bundle-verify`
-- `api-key-rotate`
-- `policy-eval --baseline-aware`
-- statistical anomaly detection alerts
-- `explain-alert <id>`
-- `report --compare-baseline`
+- `watch --interval`
+- suppression rules with expiration (`suppress-add`)
+- `forensics-lite` signed snapshots
+- `integrity-monitor`
+- `data_quality` and offline sensitive package hints in inventory
+- API audit log
+- `--dry-run` on mutating commands (`autofix-safe`, `history-prune`, `archive-rotate`)
 
-All commands include descriptions in `pocketsoc --help`.
+Use `pocketsoc --help` for all command descriptions.

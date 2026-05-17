@@ -7,6 +7,7 @@ from pathlib import Path
 from ..config import ThresholdConfig
 from ..models import CheckResult
 from ..system import command_exists, parse_json, run_command
+from .offline_pkg_db import SENSITIVE_PACKAGES
 
 SENSITIVE_PATHS = [Path.home() / ".ssh", Path.home() / ".bashrc", Path.home() / ".zshrc", Path.home() / ".profile"]
 
@@ -137,4 +138,5 @@ def check_app_inventory() -> CheckResult:
     if not ok:
         return CheckResult("app_inventory", "warning", "failed to list installed packages", {"packages": []})
     pkgs = [x.strip() for x in output.splitlines() if x.strip() and not x.lower().startswith("listing")]
-    return CheckResult("app_inventory", "ok", f"{len(pkgs)} installed package(s)", {"packages": pkgs[:300]})
+    sensitive = [p for p in pkgs if any(k in p for k in SENSITIVE_PACKAGES)]
+    return CheckResult("app_inventory", "warning" if sensitive else "ok", f"{len(pkgs)} installed package(s)", {"packages": pkgs[:300], "sensitive_matches": sensitive[:50]})

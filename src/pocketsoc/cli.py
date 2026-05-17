@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -22,6 +23,8 @@ from .deps import verify_lock
 from .doctor import run_doctor
 from .explain import explain_alert
 from .exporters import export_siem
+from .forensics import build_forensics_snapshot
+from .integrity_monitor import run_integrity_monitor
 from .notify import notify_if_needed
 from .output.files import export_markdown_report, export_trends_csv, load_alerts, load_last_scan, load_scan_history, prune_history, save_alerts, save_scan
 from .output.render import render_alerts, render_dashboard_summary, render_scan, render_trends
@@ -30,6 +33,7 @@ from .redaction import redact_scan_data
 from .rules import write_default_rules
 from .scanner import run_scan
 from .scheduler import install_schedule
+from .suppress import add_suppression
 from .webui import write_web_ui
 
 app = typer.Typer(help="PocketSOC: lightweight defensive monitoring for Termux.")
@@ -49,13 +53,23 @@ def _exit_on_alert_threshold(payload: dict, fail_on_alert: str) -> None:
             raise typer.Exit(code=2)
 
 
+@app.command("watch", help="Continuously run scans at interval with incremental output.")
+def watch(data_dir: str | None = typer.Option(None, help="Override data directory."), interval: int = typer.Option(60, help="Seconds between scans."), profile: Literal["quick", "standard", "deep"] = typer.Option("standard", help="Scan profile.")) -> None:
+    while True:
+        scan(data_dir=data_dir, profile=profile, quiet=False, output="table")
+        time.sleep(max(5, interval))
+
+
 @app.command("doctor", help="Check local dependencies and Termux command availability.")
 def doctor(fix_hints: bool = typer.Option(False, "--fix-hints", help="Include actionable fix hints.")) -> None:
     console.print_json(data=run_doctor(with_fix_hints=fix_hints))
 
 
 @app.command("autofix-safe", help="Apply non-destructive local fixes (config/rules/bootstrap files).")
-def autofix_safe(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+def autofix_safe(data_dir: str | None = typer.Option(None, help="Override data directory."), dry_run: bool = typer.Option(False, "--dry-run", help="Preview without writing changes.")) -> None:
+    if dry_run:
+        console.print_json(data={"dry_run": True, "would_fix": ["config.json", "rules.json"]})
+        return
     console.print_json(data=run_autofix_safe(_resolve_data_dir(data_dir)))
 
 
@@ -72,6 +86,23 @@ def serve(host: str = typer.Option("127.0.0.1", help="Bind host."), port: int = 
 @app.command("ui-build", help="Generate dynamic local web dashboard file.")
 def ui_build(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
     print(f"[green]UI generated:[/green] {write_web_ui(_resolve_data_dir(data_dir))}")
+
+
+@app.command("forensics-lite", help="Collect signed local forensic-lite snapshot.")
+def forensics_lite(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+    root = _resolve_data_dir(data_dir) or Path.home() / ".pocketsoc"
+    print(f"[green]Snapshot created:[/green] {build_forensics_snapshot(root)}")
+
+
+@app.command("integrity-monitor", help="Check integrity status of signed artifacts and bundles.")
+def integrity_monitor(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+    console.print_json(data=run_integrity_monitor(_resolve_data_dir(data_dir)))
+
+
+@app.command("suppress-add", help="Add suppression pattern with optional expiration timestamp.")
+def suppress_add(pattern: str, expires_at: str = typer.Option("", help="ISO timestamp expiration (optional)."), data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+    rule = {"pattern": pattern, "expires_at": expires_at}
+    print(f"[green]Suppression added:[/green] {add_suppression(rule, _resolve_data_dir(data_dir))}")
 
 
 @app.command("deps-verify", help="Validate dependency lock file format and pinning style.")
@@ -183,12 +214,19 @@ def policy_eval(data_dir: str | None = typer.Option(None, help="Override data di
 
 
 @app.command("history-prune", help="Prune scan history by age and/or max entries.")
-def history_prune(data_dir: str | None = typer.Option(None, help="Override data directory."), days: int | None = typer.Option(None, help="Keep only scans from last N days."), max_scans: int | None = typer.Option(None, help="Keep only last N scans.")) -> None:
+def history_prune(data_dir: str | None = typer.Option(None, help="Override data directory."), days: int | None = typer.Option(None, help="Keep only scans from last N days."), max_scans: int | None = typer.Option(None, help="Keep only last N scans."), dry_run: bool = typer.Option(False, "--dry-run", help="Preview prune result without writing.")) -> None:
+    if dry_run:
+        hist = load_scan_history(_resolve_data_dir(data_dir))
+        console.print_json(data={"dry_run": True, "current_entries": len(hist), "days": days, "max_scans": max_scans})
+        return
     print(f"[green]History pruned. Entries kept:[/green] {prune_history(_resolve_data_dir(data_dir), days=days, max_scans=max_scans)}")
 
 
 @app.command("archive-rotate", help="Compress and sign scan history archive.")
-def archive_rotate(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+def archive_rotate(data_dir: str | None = typer.Option(None, help="Override data directory."), dry_run: bool = typer.Option(False, "--dry-run", help="Preview without writing archive.")) -> None:
+    if dry_run:
+        console.print_json(data={"dry_run": True, "would_archive": "scan-history.jsonl"})
+        return
     out = rotate_history_archive(_resolve_data_dir(data_dir))
     print(f"[green]Archive created:[/green] {out}" if out else "[yellow]No history to archive.[/yellow]")
 
@@ -257,8 +295,8 @@ def alerts(data_dir: str | None = typer.Option(None, help="Override data directo
 
 
 @app.command("release-tag", help="Print semantic version tag and release note template.")
-def release_tag(version: str = typer.Option("v1.0.0", help="Target semver tag.")) -> None:
-    typer.echo(f"Tag: {version}\\nRelease notes: timeout/resource profiles, bundle signatures, explain-alert, compare baseline.")
+def release_tag(version: str = typer.Option("v1.1.0", help="Target semver tag.")) -> None:
+    typer.echo(f"Tag: {version}\\nRelease notes: watch mode, suppressions, forensics-lite, integrity-monitor, dry-run support.")
 
 
 if __name__ == "__main__":
