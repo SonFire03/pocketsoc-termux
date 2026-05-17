@@ -15,6 +15,8 @@ from .autofix import run_autofix_safe
 from .baseline import create_baseline, diff_baseline, load_baseline
 from .bundle import build_incident_bundle
 from .config import load_threshold_config, write_default_config
+from .configio import backup_config, restore_config
+from .deps import verify_lock
 from .doctor import run_doctor
 from .exporters import export_siem
 from .notify import notify_if_needed
@@ -59,9 +61,24 @@ def serve(host: str = typer.Option("127.0.0.1", help="Bind host."), port: int = 
     serve_api(host, port, _resolve_data_dir(data_dir))
 
 
-@app.command("ui-build", help="Generate minimal local web UI file for API navigation.")
+@app.command("ui-build", help="Generate dynamic local web dashboard file.")
 def ui_build(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
     print(f"[green]UI generated:[/green] {write_web_ui(_resolve_data_dir(data_dir))}")
+
+
+@app.command("deps-verify", help="Validate dependency lock file format and pinning style.")
+def deps_verify(lockfile: str = typer.Option("requirements-lock.txt", help="Lock file path.")) -> None:
+    console.print_json(data=verify_lock(Path(lockfile)))
+
+
+@app.command("config-backup", help="Backup config/rules/policy files into local backup folder.")
+def config_backup(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+    print(f"[green]Backup created:[/green] {backup_config(_resolve_data_dir(data_dir))}")
+
+
+@app.command("config-restore", help="Restore config/rules/policy files from backup folder.")
+def config_restore(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
+    console.print_json(data={"restored": restore_config(_resolve_data_dir(data_dir))})
 
 
 @app.command("init-config", help="Create or overwrite threshold configuration presets.")
@@ -80,23 +97,21 @@ def init_policy(data_dir: str | None = typer.Option(None, help="Override data di
 
 
 @app.command(help="Run a defensive local scan and persist signed artifacts.")
-def scan(data_dir: str | None = typer.Option(None, help="Override data directory."), profile: Literal["quick", "standard", "deep"] = typer.Option("standard", help="Scan profile."), time_profile: Literal["auto", "day", "night"] = typer.Option("auto", help="Temporal profile for threshold tuning."), quiet: bool = typer.Option(False, help="Minimal output mode."), output: Literal["table", "json", "ndjson"] = typer.Option("table", help="Output format."), fail_on_alert: Literal["none", "low", "medium", "high"] = typer.Option("none", help="Exit code 2 if alerts reach severity."), redact: bool = typer.Option(False, help="Redact sensitive values in output."), notify: bool = typer.Option(True, help="Send local Termux notification on critical risk.")) -> None:
+def scan(data_dir: str | None = typer.Option(None, help="Override data directory."), profile: Literal["quick", "standard", "deep"] = typer.Option("standard", help="Scan profile."), time_profile: Literal["auto", "day", "night"] = typer.Option("auto", help="Temporal profile for threshold tuning."), since_last: bool = typer.Option(False, help="Only keep newly emerged alerts vs previous scan."), quiet: bool = typer.Option(False, help="Minimal output mode."), output: Literal["table", "json", "ndjson"] = typer.Option("table", help="Output format."), fail_on_alert: Literal["none", "low", "medium", "high"] = typer.Option("none", help="Exit code 2 if alerts reach severity."), redact: bool = typer.Option(False, help="Redact sensitive values in output."), notify: bool = typer.Option(True, help="Send local Termux notification on critical risk.")) -> None:
     root = _resolve_data_dir(data_dir)
     thresholds = load_threshold_config(root)
-    result = run_scan(thresholds, profile=profile, rules_data_dir=root, history=load_scan_history(root))
+    hist = load_scan_history(root)
+    result = run_scan(thresholds, profile=profile, rules_data_dir=root, history=hist, since_last=since_last)
     if time_profile in ("auto", "night"):
         result.risk_score += 1
     save_scan(result, root)
     save_alerts(result, root)
 
-    scan_payload = load_last_scan(root)
-    alerts_payload = load_alerts(root)
+    scan_payload, alerts_payload = load_last_scan(root), load_alerts(root)
     if redact:
         scan_payload, alerts_payload = redact_scan_data(scan_payload, alerts_payload)
-
     if notify:
-        has_high = any(a.get("severity") == "high" for a in alerts_payload.get("alerts", []))
-        notify_if_needed(alerts_payload.get("risk_score", 0), has_high)
+        notify_if_needed(alerts_payload.get("risk_score", 0), any(a.get("severity") == "high" for a in alerts_payload.get("alerts", [])))
 
     if not quiet:
         if output == "json":
@@ -106,9 +121,7 @@ def scan(data_dir: str | None = typer.Option(None, help="Override data directory
             typer.echo(json.dumps(alerts_payload))
         else:
             from pocketsoc.models import Alert, CheckResult, ScanResult
-            checks = [CheckResult(**c) for c in scan_payload.get("checks", [])]
-            alerts_data = [Alert(**a) for a in alerts_payload.get("alerts", [])]
-            hydrated = ScanResult(scan_payload.get("timestamp", "n/a"), checks, alerts_data, alerts_payload.get("risk_score", calculate_risk_score(alerts_data)))
+            hydrated = ScanResult(scan_payload.get("timestamp", "n/a"), [CheckResult(**c) for c in scan_payload.get("checks", [])], [Alert(**a) for a in alerts_payload.get("alerts", [])], alerts_payload.get("risk_score", calculate_risk_score([])))
             render_scan(hydrated)
             render_alerts(hydrated)
             print(f"[green]Risk score:[/green] {hydrated.risk_score}")
@@ -120,8 +133,6 @@ def scan(data_dir: str | None = typer.Option(None, help="Override data directory
 def dashboard(data_dir: str | None = typer.Option(None, help="Override data directory.")) -> None:
     root = _resolve_data_dir(data_dir)
     scan_data = load_last_scan(root)
-    if not scan_data or scan_data.get("integrity_error"):
-        raise typer.Exit(code=1)
     from pocketsoc.models import Alert, CheckResult, ScanResult
     hydrated = ScanResult(scan_data.get("timestamp", "n/a"), [CheckResult(**c) for c in scan_data.get("checks", [])], [Alert(**a) for a in scan_data.get("alerts", [])], scan_data.get("risk_score", 0))
     render_dashboard_summary(hydrated)
@@ -139,8 +150,7 @@ def trends(data_dir: str | None = typer.Option(None, help="Override data directo
 
 @app.command("baseline-create", help="Create a baseline snapshot from latest scan.")
 def baseline_create(data_dir: str | None = typer.Option(None, help="Override data directory."), profile: Literal["quick", "standard", "deep"] = typer.Option("standard", help="Associated profile label."), device_id: str = typer.Option("local-device", help="Logical device identifier for multi-host baselines.")) -> None:
-    root = _resolve_data_dir(data_dir)
-    print(f"[green]Baseline saved:[/green] {create_baseline(root, profile, device_id=device_id)}")
+    print(f"[green]Baseline saved:[/green] {create_baseline(_resolve_data_dir(data_dir), profile, device_id=device_id)}")
 
 
 @app.command("baseline-diff", help="Compare latest scan against stored baseline.")
@@ -191,12 +201,12 @@ def export_cmd(data_dir: str | None = typer.Option(None, help="Override data dir
 
 
 @app.command(help="Export a Markdown report from latest signed data.")
-def report(data_dir: str | None = typer.Option(None, help="Override data directory."), redact: bool = typer.Option(False, help="Redact sensitive values in report.")) -> None:
+def report(data_dir: str | None = typer.Option(None, help="Override data directory."), redact: bool = typer.Option(False, help="Redact sensitive values in report."), report_format: Literal["full", "executive"] = typer.Option("full", "--format", help="Report style.")) -> None:
     root = _resolve_data_dir(data_dir)
     scan_data, alerts = load_last_scan(root), load_alerts(root)
     if redact:
         scan_data, alerts = redact_scan_data(scan_data, alerts)
-    print(f"[green]Report written:[/green] {export_markdown_report(scan_data, alerts, root)}")
+    print(f"[green]Report written:[/green] {export_markdown_report(scan_data, alerts, root, report_format=report_format)}")
 
 
 @app.command(help="Display alerts as JSON or formatted table.")
@@ -213,8 +223,8 @@ def alerts(data_dir: str | None = typer.Option(None, help="Override data directo
 
 
 @app.command("release-tag", help="Print semantic version tag and release note template.")
-def release_tag(version: str = typer.Option("v0.7.0", help="Target semver tag.")) -> None:
-    typer.echo(f"Tag: {version}\nRelease notes: API/UI/plugins/policy/archive/bundle improvements.")
+def release_tag(version: str = typer.Option("v0.8.0", help="Target semver tag.")) -> None:
+    typer.echo(f"Tag: {version}\\nRelease notes: API auth, web dashboard, scan diff, deps verify, config backup/restore.")
 
 
 if __name__ == "__main__":
