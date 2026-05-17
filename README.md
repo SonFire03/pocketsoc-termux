@@ -1,64 +1,37 @@
 # PocketSOC for Termux
 
-![CI](https://img.shields.io/badge/CI-GitHub%20Actions-blue)
+PocketSOC is a defensive, local-only monitoring CLI for Android Termux.
 
-PocketSOC is a lightweight, defensive, local-only monitoring CLI for Android Termux.
+## Core Commands
 
-## What It Is
+- `pocketsoc init-config` - Create threshold config presets.
+- `pocketsoc init-rules` - Create custom rules template.
+- `pocketsoc scan` - Run local defensive scan and persist signed artifacts.
+- `pocketsoc dashboard` - Show current security posture summary.
+- `pocketsoc alerts` - Show alerts in JSON or table.
+- `pocketsoc report` - Export Markdown report.
+- `pocketsoc trends` - Show historical evolution and export CSV.
+- `pocketsoc baseline-create` - Save baseline snapshot.
+- `pocketsoc baseline-diff` - Compare latest scan to baseline.
+- `pocketsoc history-prune` - Prune stored scan history.
+- `pocketsoc schedule-install` - Install local scheduled scan script.
+- `pocketsoc verify-integrity` - Verify signed JSON artifacts.
+- `pocketsoc release-tag` - Generate release tag template.
 
-- A small Python CLI (Typer + Rich) for local health and security visibility.
-- Local checks for storage, battery, network, listening ports, process inventory, sensitive permissions, package hygiene, startup persistence, outbound connections, and binary integrity.
-- JSON alerts with risk scoring, deduplication, and basic correlation.
-- Scan history, trend view, and CSV export.
-- Baseline create/diff workflow.
-- Configurable thresholds and custom rule engine.
+## Scan Modes
 
-## Commands
+- `quick`: essential checks only
+- `standard`: quick + permissions + package hygiene + startup persistence
+- `deep`: standard + outbound connections + binary integrity
 
-```bash
-pocketsoc init-config
-pocketsoc init-rules
-pocketsoc scan
-pocketsoc trends
-pocketsoc baseline-create
-pocketsoc baseline-diff
-pocketsoc dashboard
-pocketsoc report
-pocketsoc alerts
-```
+## Output formats
 
-## Useful CLI Options
+- `--output table`
+- `--output json`
+- `--output ndjson`
 
-- `pocketsoc scan --profile quick|standard|deep`
-- `pocketsoc scan --quiet`
-- `pocketsoc scan --output json`
-- `pocketsoc scan --fail-on-alert medium`
-- `pocketsoc scan --redact`
-- `pocketsoc trends --csv`
-- `pocketsoc alerts --table --redact`
-- `pocketsoc report --redact`
+## Safety boundaries
 
-## What It Is Not
-
-- Not an offensive security tool.
-- Not an exploit framework.
-- Not an aggressive scanner.
-- Not a remote attack utility.
-
-## Safety
-
-- Local checks only.
-- No exploit logic.
-- No brute-force logic.
-- No remote scanning workflows.
-
-## Output Files (`~/.pocketsoc/`)
-
-- `config.json`
-- `rules.json`
-- `last_scan.json`
-- `scan-history.jsonl`
-- `baseline.json`
-- `trends.csv`
-- `alerts.json`
-- `pocketsoc-report.md`
+- local checks only
+- no exploit or offensive module
+- no aggressive network scanning

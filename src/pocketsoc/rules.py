@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from .models import Alert, CheckResult
 from .output.files import ensure_data_dir
-
 
 RULES_FILE = "rules.json"
 
@@ -28,31 +28,27 @@ def write_default_rules(data_dir: Path | None = None, force: bool = False) -> Pa
     if target.exists() and not force:
         return target
     defaults = [
-        {
-            "id": "RULE-PROCESS-COUNT-HIGH",
-            "check": "running_processes",
-            "detail_key": "count",
-            "op": ">=",
-            "value": 350,
-            "severity": "medium",
-            "title": "Unusually high process count",
-        }
+        {"id": "RULE-PROCESS-COUNT-HIGH", "logic": "AND", "conditions": [{"check": "running_processes", "detail_key": "count", "op": ">=", "value": 350}], "severity": "medium", "title": "Unusually high process count"},
+        {"id": "RULE-STARTUP-REGEX", "logic": "AND", "conditions": [{"check": "local_persistence", "detail_key": "findings", "regex": "(curl|wget|nc)"}], "severity": "medium", "title": "Suspicious startup regex matched"},
     ]
     target.write_text(json.dumps(defaults, indent=2) + "\n", encoding="utf-8")
     return target
 
 
-def _compare(left: float, op: str, right: float) -> bool:
-    if op == ">=":
-        return left >= right
-    if op == ">":
-        return left > right
-    if op == "<=":
-        return left <= right
-    if op == "<":
-        return left < right
-    if op == "==":
-        return left == right
+def _cmp(left: float, op: str, right: float) -> bool:
+    return {">=": left >= right, ">": left > right, "<=": left <= right, "<": left < right, "==": left == right}.get(op, False)
+
+
+def _eval_condition(check: CheckResult, cond: dict) -> bool:
+    key = str(cond.get("detail_key", ""))
+    data = check.details.get(key)
+    if "regex" in cond and isinstance(data, list):
+        pattern = re.compile(str(cond["regex"]), re.IGNORECASE)
+        return any(pattern.search(str(item)) for item in data)
+    if "regex" in cond and isinstance(data, str):
+        return re.search(str(cond["regex"]), data, flags=re.IGNORECASE) is not None
+    if isinstance(data, (int, float)) and isinstance(cond.get("value"), (int, float)):
+        return _cmp(float(data), str(cond.get("op", "")), float(cond["value"]))
     return False
 
 
@@ -60,24 +56,15 @@ def apply_custom_rules(checks: list[CheckResult], rules: list[dict]) -> list[Ale
     alerts: list[Alert] = []
     by_name = {c.name: c for c in checks}
     for rule in rules:
-        check_name = str(rule.get("check", ""))
-        check = by_name.get(check_name)
-        if not check:
+        logic = str(rule.get("logic", "AND")).upper()
+        conditions = rule.get("conditions", [])
+        if not isinstance(conditions, list) or not conditions:
             continue
-        key = str(rule.get("detail_key", ""))
-        op = str(rule.get("op", ""))
-        val = rule.get("value")
-        data = check.details.get(key)
-        if not isinstance(data, (int, float)) or not isinstance(val, (int, float)):
-            continue
-        if _compare(float(data), op, float(val)):
-            alerts.append(
-                Alert(
-                    id=str(rule.get("id", "RULE-CUSTOM")),
-                    severity=str(rule.get("severity", "low")),
-                    title=str(rule.get("title", "Custom rule matched")),
-                    description=f"{check_name}.{key}={data} {op} {val}",
-                    source_check=check_name,
-                )
-            )
+        results = []
+        for cond in conditions:
+            check = by_name.get(str(cond.get("check", "")))
+            results.append(_eval_condition(check, cond) if check else False)
+        matched = all(results) if logic == "AND" else any(results)
+        if matched:
+            alerts.append(Alert(id=str(rule.get("id", "RULE-CUSTOM")), severity=str(rule.get("severity", "low")), title=str(rule.get("title", "Custom rule matched")), description=f"rule {rule.get('id', 'RULE-CUSTOM')} matched", source_check="custom_rules"))
     return alerts
