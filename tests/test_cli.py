@@ -11,9 +11,12 @@ runner = CliRunner()
 def test_help_lists_new_commands() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
+    assert "doctor" in result.stdout
+    assert "autofix-safe" in result.stdout
     assert "history-prune" in result.stdout
     assert "schedule-install" in result.stdout
     assert "verify-integrity" in result.stdout
+    assert "export" in result.stdout
 
 
 def test_init_files(tmp_path) -> None:
