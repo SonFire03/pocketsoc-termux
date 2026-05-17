@@ -10,9 +10,11 @@ from urllib.parse import parse_qs, urlparse
 
 from .data_quality import compute_data_quality
 from .output.files import ensure_data_dir, load_alerts, load_last_scan, load_scan_history
+from .rate_limit import SlidingRateLimiter
 from .triage import upsert_alert_state
 
 START_TS = time.time()
+RL = SlidingRateLimiter(limit=120, window_seconds=60)
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -30,6 +32,10 @@ class _Handler(BaseHTTPRequestHandler):
             return True
         return self.headers.get("X-PocketSOC-Token", "") == token
 
+    def _rate_ok(self, endpoint: str) -> bool:
+        key = f"{self.client_address[0]}:{endpoint}"
+        return RL.allow(key)
+
     def _send(self, payload: dict, status: int = 200, endpoint: str = "") -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
@@ -46,6 +52,9 @@ class _Handler(BaseHTTPRequestHandler):
 
         if not self._auth_ok():
             self._send({"error": "unauthorized"}, 401, path)
+            return
+        if not self._rate_ok(path):
+            self._send({"error": "rate_limited"}, 429, path)
             return
 
         if path == "/health":
@@ -83,6 +92,9 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._auth_ok():
             self._send({"error": "unauthorized"}, 401, path)
             return
+        if not self._rate_ok(path):
+            self._send({"error": "rate_limited"}, 429, path)
+            return
 
         if path == "/alert-state":
             length = int(self.headers.get("Content-Length", "0"))
@@ -98,9 +110,10 @@ class _Handler(BaseHTTPRequestHandler):
                 status=str(payload.get("status", "new")),
                 owner=str(payload.get("owner", "")),
                 comment=str(payload.get("comment", "")),
+                source_check=str(payload.get("source_check", "")),
                 data_dir=self.data_dir,
             )
-            self._send({"ok": True, "item": entry}, 200, path)
+            self._send({"ok": "error" not in entry, "item": entry}, 200 if "error" not in entry else 400, path)
             return
 
         self._send({"error": "not found"}, 404, path)

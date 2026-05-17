@@ -1,13 +1,13 @@
 # Changelog
 
+## 1.4.0 - 2026-05-17
+
+- Added real API sliding-window rate limiting with `429` responses.
+- Added triage template apply command and SLA dashboard command.
+- Added API incident workflow endpoint support and incident pack export.
+- Added bundle AES-GCM decryption command.
+- Added policy simulator over historical scans.
+- Added release notes generator command.
+
 ## 1.3.1 - 2026-05-17
-
-- Added triage auto-routing and workflow transition guard.
-- Added comment templates and compliance policy packs.
-- Added API rate-control groundwork and `POST /alert-state` workflow endpoint.
-- Added incident workspace improvements in local UI.
-- Added signed evidence manifest in bundles.
-- Upgraded bundle encryption to AES-GCM (`cryptography` required when enabled).
-
-## 1.3.0 - 2026-05-17
-- Added triage workflow, alert-state API, timeline, evidence chain, and encrypted bundles.
+- Added triage routing guards, workspace updates, manifest signing, AES-GCM encryption.

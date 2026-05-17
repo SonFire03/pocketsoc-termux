@@ -18,29 +18,36 @@ from .autofix import run_autofix_safe
 from .baseline import create_baseline, diff_baseline, load_baseline
 from .bundle import build_incident_bundle
 from .bundle_sign import sign_bundle, verify_bundle
+from .comment_templates import TEMPLATES
 from .config import load_threshold_config, write_default_config
 from .configio import backup_config, restore_config
+from .crypto_zip import decrypt_file
 from .deps import verify_lock
-from .doctor import run_doctor
 from .evidence_chain import verify_chain
 from .explain import explain_alert
 from .exporters import export_siem
 from .forensics import build_forensics_snapshot
 from .forensics_verify import verify_forensics_snapshot
+from .incident_pack import export_incident_pack
 from .integrity_monitor import run_integrity_monitor
 from .notify import notify_if_needed
 from .output.files import export_markdown_report, export_trends_csv, load_alerts, load_last_scan, load_scan_history, prune_history, save_alerts, save_scan
 from .output.render import render_alerts, render_dashboard_summary, render_scan, render_trends
 from .policy import eval_policy, write_default_policy
+from .policy_simulator import simulate_policies
 from .readonly import guard_mutation
 from .redaction import redact_scan_data
+from .release_notes import generate_release_notes
 from .report_diff import diff_scans, load_scan_file
 from .rules import write_default_rules
 from .scanner import run_scan, scan_plan
 from .scheduler import install_schedule
+from .sla_dashboard import build_sla_dashboard
 from .suppress import add_suppression
 from .suppress_manage import list_suppressions, remove_suppression
 from .timeline import build_timeline
+from .triage import upsert_alert_state
+from .triage_templates import apply_template
 from .webui import write_web_ui
 
 app = typer.Typer(help="PocketSOC CLI")
@@ -146,6 +153,18 @@ def scan_explain_alert(alert_id: str, data_dir: str | None = typer.Option(None))
     console.print_json(data=explain_alert(alert_id, _resolve_data_dir(data_dir)))
 
 
+@scan_app.command("triage-apply", help="Apply triage state/owner/comment to alert.")
+def scan_triage_apply(alert_id: str, severity: str, status: str = typer.Option("investigating"), owner: str = typer.Option(""), comment: str = typer.Option(""), source_check: str = typer.Option(""), data_dir: str | None = typer.Option(None)) -> None:
+    guard_mutation()
+    console.print_json(data=upsert_alert_state(alert_id, severity, status=status, owner=owner, comment=comment, source_check=source_check, data_dir=_resolve_data_dir(data_dir)))
+
+
+@scan_app.command("triage-template", help="Apply predefined comment template to alert.")
+def scan_triage_template(alert_id: str, severity: str, template: str = typer.Option("investigation_started"), status: str = typer.Option("investigating"), owner: str = typer.Option(""), source_check: str = typer.Option(""), data_dir: str | None = typer.Option(None)) -> None:
+    guard_mutation()
+    console.print_json(data=apply_template(alert_id=alert_id, severity=severity, template_key=template, status=status, owner=owner, source_check=source_check, data_dir=_resolve_data_dir(data_dir)))
+
+
 @report_app.command("md", help="Export a Markdown report.")
 def report_md(data_dir: str | None = typer.Option(None), redact: bool = typer.Option(False), report_format: Literal["full", "executive"] = typer.Option("full", "--format"), compare_baseline: bool = typer.Option(False, "--compare-baseline")) -> None:
     root = _resolve_data_dir(data_dir)
@@ -164,6 +183,11 @@ def report_diff(scan_a: str, scan_b: str) -> None:
 @report_app.command("timeline", help="Render incident timeline from scans + triage actions.")
 def report_timeline(data_dir: str | None = typer.Option(None)) -> None:
     console.print_json(data={"events": build_timeline(_resolve_data_dir(data_dir))})
+
+
+@report_app.command("sla", help="Show SLA dashboard (overdue count, MTTR, opened/closed).")
+def report_sla(data_dir: str | None = typer.Option(None)) -> None:
+    console.print_json(data=build_sla_dashboard(_resolve_data_dir(data_dir)))
 
 
 @report_app.command("trends", help="Display trends and optionally export CSV.")
@@ -185,6 +209,12 @@ def report_audit_export(data_dir: str | None = typer.Option(None), fmt: Literal[
     print(f"[green]Audit export written:[/green] {export_audit(_resolve_data_dir(data_dir), fmt=fmt)}")
 
 
+@report_app.command("incident-pack", help="Export full incident pack (alerts, timeline, triage, evidence).")
+def report_incident_pack(data_dir: str | None = typer.Option(None)) -> None:
+    guard_mutation()
+    print(f"[green]Incident pack written:[/green] {export_incident_pack(_resolve_data_dir(data_dir))}")
+
+
 @report_app.command("bundle", help="Build incident bundle ZIP from local artifacts.")
 def report_bundle(data_dir: str | None = typer.Option(None), since: str = typer.Option("24h"), redact: bool = typer.Option(False, "--redact"), sign: bool = typer.Option(True, "--sign/--no-sign"), encrypt_password: str = typer.Option("", "--encrypt-password", help="Optional password to encrypt resulting bundle.")) -> None:
     guard_mutation()
@@ -196,6 +226,13 @@ def report_bundle(data_dir: str | None = typer.Option(None), since: str = typer.
         print(f"[green]Bundle created:[/green] {out}\n[green]Signature:[/green] {sig}")
     else:
         print(f"[green]Bundle created:[/green] {out}")
+
+
+@report_app.command("bundle-decrypt", help="Decrypt AES-GCM encrypted bundle (.enc).")
+def report_bundle_decrypt(bundle_path: str, password: str = typer.Option(..., "--password")) -> None:
+    guard_mutation()
+    out = decrypt_file(Path(bundle_path), password)
+    print(f"[green]Decrypted bundle:[/green] {out}")
 
 
 @report_app.command("bundle-verify", help="Verify signature of a generated incident bundle.")
@@ -223,6 +260,11 @@ def baseline_policy_eval(data_dir: str | None = typer.Option(None), enforce: boo
     console.print_json(data=res)
     if enforce and not res.get("compliant", False):
         raise typer.Exit(code=2)
+
+
+@baseline_app.command("policy-sim", help="Simulate compliance packs across scan history.")
+def baseline_policy_sim(data_dir: str | None = typer.Option(None)) -> None:
+    console.print_json(data=simulate_policies(_resolve_data_dir(data_dir)))
 
 
 @api_app.command("serve", help="Start local read-only API server for scans/alerts/trends.")
@@ -305,6 +347,11 @@ def maint_schedule_install(data_dir: str | None = typer.Option(None), interval: 
     print(f"[green]Schedule installed:[/green] {install_schedule(interval, _resolve_data_dir(data_dir))}")
 
 
+@maint_app.command("release-notes", help="Generate concise release notes from changelog file.")
+def maint_release_notes(changelog: str = typer.Option("CHANGELOG.md")) -> None:
+    typer.echo(generate_release_notes(Path(changelog)))
+
+
 @config_app.command("init", help="Create/overwrite threshold configuration presets.")
 def config_init(data_dir: str | None = typer.Option(None), force: bool = typer.Option(False), profile: Literal["balanced", "strict", "battery-saver"] = typer.Option("balanced")) -> None:
     guard_mutation()
@@ -318,9 +365,14 @@ def config_rules(data_dir: str | None = typer.Option(None), force: bool = typer.
 
 
 @config_app.command("policy", help="Create local compliance policy template.")
-def config_policy(data_dir: str | None = typer.Option(None), force: bool = typer.Option(False)) -> None:
+def config_policy(data_dir: str | None = typer.Option(None), force: bool = typer.Option(False), pack: Literal["home-lab", "strict-mobile", "low-power"] = typer.Option("home-lab", "--pack")) -> None:
     guard_mutation()
-    print(f"[green]Policy ready:[/green] {write_default_policy(_resolve_data_dir(data_dir), force=force)}")
+    print(f"[green]Policy ready:[/green] {write_default_policy(_resolve_data_dir(data_dir), force=force, pack=pack)}")
+
+
+@config_app.command("comment-templates", help="List available triage comment templates.")
+def config_comment_templates() -> None:
+    console.print_json(data={"templates": TEMPLATES})
 
 
 @config_app.command("backup", help="Backup config/rules/policy files.")
